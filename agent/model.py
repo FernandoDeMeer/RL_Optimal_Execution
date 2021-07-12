@@ -19,7 +19,7 @@ tf1, tf, tfv = try_import_tf()
 
 class End_to_End_Network1(tf.keras.Model):
 
-    def __init__(self):
+    def __init__(self,):
         super(End_to_End_Network1, self).__init__()
         self.dense1 = tf.keras.layers.Dense(128, activation=tf.nn.relu)
         self.dense2 = tf.keras.layers.Dense(128, activation=tf.nn.relu)
@@ -29,7 +29,8 @@ class End_to_End_Network1(tf.keras.Model):
         x = self.dense1(inputs)
         x = self.dense2(x)
         x = tf.keras.layers.Concatenate(axis=0)([x, prev_r, prev_a])
-        return self.lstm(x)
+        x = self.lstm(x)
+        return tf.keras.Model(self.inputs,[])
 
     def value_function(self,action_set,prev_r,prev_a):
 
