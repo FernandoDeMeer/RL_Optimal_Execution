@@ -1,4 +1,5 @@
-.DS_Store
+*.DS_Store
+venv_rloptimaltradeexecution/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,8 +6,9 @@ from decimal import Decimal
 
 """
 TODO:
-    - add the dynamic number of lobs in the state shape
-    -
+    - separate the *Environment classes in different types but use 'inheritance' to build on top. 
+    - add the dynamic number of lobs in the state shape.
+    - 
 """
 
 class LimitOrderBookEnv(gym.Env):
@@ -100,6 +101,7 @@ class LimitOrderBookEnv(gym.Env):
     def _build_state(self):
 
         next_lob = self.data_feed.next_lob_snapshot(None)
+        self._sync_lob_2_engine(next_lob)
 
         next_lob = np.concatenate((next_lob, [self.remaining_qty_to_trade, self.remaining_timesteps]))
 
@@ -108,6 +110,12 @@ class LimitOrderBookEnv(gym.Env):
 
     def _normalize_state(self):
         return []
+
+    def _sync_lob_2_engine(self, lob):
+        """
+            use OrderBook() methods to cancel/add/update levels.
+        """
+        pass
 
     def reset(self):
         """
