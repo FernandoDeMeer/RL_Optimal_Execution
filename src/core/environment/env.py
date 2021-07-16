@@ -19,15 +19,11 @@ class HistoricalOrderBookEnv(BaseEnv):
 
         super().__init__(data_feed, max_steps, trade_direction, qty_to_trade, steps_per_episode, nr_of_lobs, lob_depth)
 
-    # we choose different numbers of shares to trade, range of actions from 0 to 2TWAP (the TWAP
-        # orders are able to consume at least the 2nd best bid price on average), the decision to make is the number
-        # of shares to trade at time T, so we need a Box environment of 1 dim
-
 
     def execute_action_on_engine(self, signal):
 
         """
-        BookOrder has some nice methods to get the current quantities... so we can get the cummulated quantity..
+        BookOrder has some nice methods to get the current quantities... so we can get the cumulative quantity..
         """
         place_order = {'type': 'market',
                        'timestamp': self.total_timesteps,

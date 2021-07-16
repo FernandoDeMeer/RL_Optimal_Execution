@@ -24,7 +24,7 @@ class BaseEnv(gym.Env, ABC):
         self.gui = None
 
         self.max_steps = max_steps
-        self.trade_direction = trade_direction
+        self.trade_direction = trade_direction # 1 for buying, -1 for selling.
         self.qty_to_trade = qty_to_trade
         self.steps_per_episode = steps_per_episode
 
@@ -37,6 +37,7 @@ class BaseEnv(gym.Env, ABC):
         # self.current_total_steps = 0
 
         self.twap = 0
+        self.price = 0
         self.state = None
         self.done = False
 
@@ -51,21 +52,33 @@ class BaseEnv(gym.Env, ABC):
             remaining_qty_to_trade > 0
             remaining_time > 0 
         """
-        self.observation_space = gym.spaces.Box(low=np.array([0, 1, 0, 0, 0, 0]),
-                                                high=np.array([100, 2, 100, 1, self.qty_to_trade, self.steps_per_episode]),
+        low = np.concatenate((np.zeros(self.lob_depth),np.ones(self.lob_depth),
+                               np.zeros(self.lob_depth),np.zeros(self.lob_depth),0,0),axis=0)
+        high = np.concatenate((np.ones(self.lob_depth)*np.inf,np.ones(self.lob_depth)*np.inf,
+                               np.ones(self.lob_depth)*np.inf,np.ones(self.lob_depth),self.qty_to_trade,
+                               self.steps_per_episode), axis= 0)
+        assert low.shape == high.shape == obs_space_n
+        self.observation_space = gym.spaces.Box(low=low,
+                                                high=high,
                                                 shape=obs_space_n,
                                                 dtype=np.float32)
 
-        # TODO: when is the self.twap calculated? cuz' here is zero and then... i set the range like below.
-        self.action_space = gym.spaces.Box(0.0, 2 * self.twap,
-                                           shape=1,
+        # TODO: when is the self.twap calculated? cuz' here is zero and then... i set the range like below. Fernando: I think the easiest is to update it at every step()
+
+        # From the paper:  In the optimal trade execution
+        # framework, we set the range of actions from 0 to 2TWAP and discretize the
+        # action space into 20 equally distributed grids. Hence, we have 21 available actions
+        # including: 0, 0.1TWAP, 0.2TWAP, ..., 1.9TWAP, 2TWAP. The learned policy
+        # maps the state to the 21 actions
+        self.action_space = gym.spaces.Discrete(shape=21,
                                            dtype=np.float32)
         self.reset()
         self.seed()
 
     def reset(self):
 
-        # self.observer.draw_random_observations() todo: do we need this?
+        # self.observer.draw_random_observations() todo: do we need this? Fernando: Depends, if we're going to train online only then we don't, but if we're going to do offline (i.e. bootstrapping then yes)
+
         self.matching_order_engine = OrderBook()
 
         self.remaining_qty_to_trade = self.qty_to_trade
@@ -110,17 +123,34 @@ class BaseEnv(gym.Env, ABC):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    @abstractmethod
     def calc_twap(self):
-        pass
+        # TODO: Need to access here the current LOB (before the action is taken), the twap and the total number of steps per episode.
+        if self.trade_direction == 1:
+            # We are buying, so the twap is updated according to the best ask prices
+            self.twap = self.twap + self.state[0]/self.steps_per_episode
+        elif self.trade_direction == -1:
+            self.twap = self.twap + self.state[2*self.lob_depth]/self.steps_per_episode
+
+        return self.twap
+
 
     @abstractmethod
     def execute_action_on_engine(self, action):
         pass
 
-    @abstractmethod
     def calc_reward(self):
-        pass
+        reward = 0
+        if self.trade_direction == 1:
+            # We are buying, so we want to have a lower price than the twap
+            if self.twap < self.price:
+                reward = 1
+        elif self.trade_direction == -1:
+            # We are selling, so we want to have a lower price than the twap
+            if self.twap > self.price:
+                reward = 1
+
+        return reward
+
 
     @abstractmethod
     def sync_lob_2_engine(self, lob):
