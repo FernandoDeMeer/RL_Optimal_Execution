@@ -1,4 +1,5 @@
 from src.data.data_feed import DataFeed
+import numpy as np
 
 
 class HistoricalDataFeed(DataFeed):
@@ -10,4 +11,5 @@ class HistoricalDataFeed(DataFeed):
         """
             load data from binary files on-demand to avoid RAM issues.
         """
+
         return None
