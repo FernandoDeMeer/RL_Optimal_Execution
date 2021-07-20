@@ -1,55 +1,33 @@
-import numpy as np
-import os
-import random
-
-import ray
-from ray import tune
-from ray.tune import grid_search
-from ray.rllib.env.env_context import EnvContext
-from ray.rllib.models import ModelCatalog
 from ray.rllib.models.tf.tf_modelv2 import TFModelV2
-from ray.rllib.models.tf.fcnet import FullyConnectedNetwork
-from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
-from ray.rllib.models.torch.fcnet import FullyConnectedNetwork as TorchFC
-from ray.rllib.utils.framework import try_import_tf, try_import_torch
-from ray.rllib.utils.test_utils import check_learning_achieved
-
+from ray.rllib.utils.framework import try_import_tf
 
 tf1, tf, tfv = try_import_tf()
 
-class End_to_End_Network1(tf.keras.Model):
-
-    def __init__(self,):
-        super(End_to_End_Network1, self).__init__()
-        self.dense1 = tf.keras.layers.Dense(128, activation=tf.nn.relu)
-        self.dense2 = tf.keras.layers.Dense(128, activation=tf.nn.relu)
-        self.lstm = tf.keras.layers.LSTM(51)
-
-    def call(self, inputs,prev_r,prev_a):
-        x = self.dense1(inputs)
-        x = self.dense2(x)
-        x = tf.keras.layers.Concatenate(axis=0)([x, prev_r, prev_a])
-        x = self.lstm(x)
-        return tf.keras.Model(self.inputs,[])
-
-    def value_function(self,action_set,prev_r,prev_a):
-
-        return self.call(action_set,prev_r,prev_a)
-
-
-
 class CustomModel(TFModelV2):
-    """Example of a keras custom model that just delegates to an fc-net."""
+    """
+    LSTM architecture from "An End-to-End Optimal Trade Execution Framework
+    based on Proximal Policy Optimization", adapted to RLlib's Custom model format
+    for policy gradient algorithms.
+    """
+
 
     def __init__(self, obs_space, action_space, num_outputs, model_config,
-                 name):
-        super(CustomModel, self).__init__(obs_space, action_space, num_outputs,
-                                          model_config, name)
-        self.model = End_to_End_Network1()
+                     name):
+            super(CustomModel, self).__init__(obs_space, action_space, num_outputs,
+                                              model_config, name)
+            self.input = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
+            dense1 = tf.keras.layers.Dense(128, activation=tf.nn.relu)(self.input)
+            dense2 = tf.keras.layers.Dense(128, activation=tf.nn.relu)(dense1)
+            layer_out = tf.keras.layers.LSTM(50)(dense2)
+            value_out = tf.keras.layers.LSTM(1)(dense2)
+            self.base_model = tf.keras.Model(self.inputs, [layer_out, value_out])
 
-    def forward(self, input_dict, state, seq_lens): #TODO: Think how to modify this to adapt it to the Network of the paper.
-
-        return self.model.forward(input_dict, state, seq_lens)
+    def forward(self, input_dict, state, seq_lens):
+        model_out, self._value_out = self.base_model(input_dict["obs"])
+        return model_out, state
 
     def value_function(self):
-        return self.model.value_function()
+        return tf.reshape(self._value_out, [-1])
+
+    def metrics(self): #TODO: Add metrics to keep track of
+        return {"foo": tf.constant(42.0)}
