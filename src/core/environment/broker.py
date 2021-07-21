@@ -3,7 +3,7 @@ import numpy as np
 from abc import ABC
 
 
-def calc_value_weighted_price_from_trades(trades):
+def calc_volume_weighted_price_from_trades(trades):
     volume = 0
     price = 0
     for idx in range(len(trades)):
@@ -29,13 +29,13 @@ class Broker(ABC):
             vol_wgt_price_1, vol_1 = 0, 0
         else:
             trades_1, order_id_1 = LOB.process_order(order_1, False, False)
-            vol_wgt_price_1, vol_1 = calc_value_weighted_price_from_trades(trades_1)
+            vol_wgt_price_1, vol_1 = calc_volume_weighted_price_from_trades(trades_1)
 
         if order_2['quantity'] <= 0:
             vol_wgt_price_2, vol_2 = 0, 0
         else:
             trades_2, order_id_2 = LOB_copy.process_order(order_2, False, False)
-            vol_wgt_price_2, vol_2 = calc_value_weighted_price_from_trades(trades_2)
+            vol_wgt_price_2, vol_2 = calc_volume_weighted_price_from_trades(trades_2)
 
         self.algo_1.append(vol_wgt_price_1)
         self.algo_2.append(vol_wgt_price_2)

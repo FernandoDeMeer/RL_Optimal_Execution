@@ -15,7 +15,8 @@ class BaseEnv(gym.Env, ABC):
                  qty_to_trade,
                  steps_per_episode,
                  nr_of_lobs,
-                 lob_depth
+                 lob_depth,
+                 action_space
                  ):
 
         self.matching_order_engine = OrderBook()
@@ -45,18 +46,35 @@ class BaseEnv(gym.Env, ABC):
         obs_space_n = self.nr_of_lobs * self.lob_depth * 4 + 2
 
         """
+        If the obs_space is normalized the bounds are as follows: 
+        
             asks_volume > 0
-            asks_price > 1
+            asks_price >= 1
             bids_volume > 0
-            bids_price < 1
+            bids_price <= 1
             remaining_qty_to_trade > 0
             remaining_time > 0 
         """
-        low = np.concatenate((np.zeros(self.lob_depth),np.ones(self.lob_depth),
-                               np.zeros(self.lob_depth),np.zeros(self.lob_depth),0,0),axis=0)
-        high = np.concatenate((np.ones(self.lob_depth)*np.inf,np.ones(self.lob_depth)*np.inf,
-                               np.ones(self.lob_depth)*np.inf,np.ones(self.lob_depth),self.qty_to_trade,
+
+        """
+            Observation Space Config Parameters
+            
+            nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
+            lob_depth : int, Depth of the LOB to be in each snapshot 
+            norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
+            
+        """
+
+        zeros = np.zeros(self.lob_depth)
+        ones = np.ones(self.lob_depth)
+
+        low = np.concatenate((zeros,ones,
+                              zeros,zeros,0,0),axis=0)
+
+        high = np.concatenate((ones*np.inf,ones*np.inf,
+                               ones*np.inf,ones,self.qty_to_trade,
                                self.steps_per_episode), axis= 0)
+
         assert low.shape == high.shape == obs_space_n
         self.observation_space = gym.spaces.Box(low=low,
                                                 high=high,
@@ -65,13 +83,8 @@ class BaseEnv(gym.Env, ABC):
 
         # TODO: when is the self.twap calculated? cuz' here is zero and then... i set the range like below. Fernando: I think the easiest is to update it at every step()
 
-        # From the paper:  In the optimal trade execution
-        # framework, we set the range of actions from 0 to 2TWAP and discretize the
-        # action space into 20 equally distributed grids. Hence, we have 21 available actions
-        # including: 0, 0.1TWAP, 0.2TWAP, ..., 1.9TWAP, 2TWAP. The learned policy
-        # maps the state to the 21 actions
-        self.action_space = gym.spaces.Discrete(shape=21,
-                                           dtype=np.float32)
+        self.action_space = action_space
+
         self.reset()
         self.seed()
 

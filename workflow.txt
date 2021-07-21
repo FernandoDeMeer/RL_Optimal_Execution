@@ -1,0 +1,12 @@
+Implementation decisions/ Immediate Workflow:
+
+
+-- Observation space will have a config object that will specify its shape -- Fernando
+-- Action space will be an attribute of the environment declared during the run() -- Fernando
+-- We will build an Analyzer class that receives the data feed in the same fashion as the agent and keeps track of execution
+prices of the agent and benchmark algorithm. -- Florin
+-- Don't worry about trainers for now.
+-- Merge lob_env_old with base_env and delete the discarded parts. --Chris
+-- Get the Datafeed up and running --Florin
+-- Keep the Broker class as an attribute of the environment and have it manage the execution of orders (we will implement fancy execution aspects later) -- Fernando
+-- GUI/Render: PyQT library to monitor training graphs/ Tensorboard from RLLib to monitor training prices -- Florin

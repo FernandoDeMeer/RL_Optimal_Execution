@@ -35,7 +35,7 @@ class RLOptimalTradeExecutionApp:
             return None
 
     def run(self):
-
+        # TODO the action space will be declared here along with the agent
         if self.params["train"]:
             self._train()
         else:
