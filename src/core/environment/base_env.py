@@ -14,9 +14,8 @@ class BaseEnv(gym.Env, ABC):
                  trade_direction,
                  qty_to_trade,
                  steps_per_episode,
-                 nr_of_lobs,
-                 lob_depth,
-                 action_space
+                 obs_space_config,
+                 action_space,
                  ):
 
         self.matching_order_engine = OrderBook()
@@ -32,8 +31,18 @@ class BaseEnv(gym.Env, ABC):
         self.remaining_qty_to_trade = 0
         self.remaining_steps = 0
 
-        self.nr_of_lobs = nr_of_lobs
-        self.lob_depth = lob_depth
+        """
+        Observation Space Config Parameters
+        
+        nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
+        lob_depth : int, Depth of the LOB to be in each snapshot 
+        norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
+        
+        """
+
+        self.nr_of_lobs = obs_space_config.nr_of_lobs
+        self.lob_depth = obs_space_config.lob_depth
+        self.norm = obs_space_config.norm
 
         # self.current_total_steps = 0
 
@@ -56,32 +65,30 @@ class BaseEnv(gym.Env, ABC):
             remaining_time > 0 
         """
 
-        """
-            Observation Space Config Parameters
-            
-            nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
-            lob_depth : int, Depth of the LOB to be in each snapshot 
-            norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
-            
-        """
 
         zeros = np.zeros(self.lob_depth)
         ones = np.ones(self.lob_depth)
 
-        low = np.concatenate((zeros,ones,
-                              zeros,zeros,0,0),axis=0)
+        if self.norm:
 
-        high = np.concatenate((ones*np.inf,ones*np.inf,
-                               ones*np.inf,ones,self.qty_to_trade,
-                               self.steps_per_episode), axis= 0)
+            low = np.concatenate((zeros,ones,
+                                  zeros,zeros,0,0),axis=0)
+
+            high = np.concatenate((ones*np.inf,ones*np.inf,
+                                   ones*np.inf,ones,self.qty_to_trade,
+                                   self.steps_per_episode), axis= 0)
+        else:
+
+            low = np.append(np.zeros(obs_space_n-2), [-np.inf, 0], axis=0)
+
+            high = np.ones(obs_space_n) * np.inf
+
 
         assert low.shape == high.shape == obs_space_n
         self.observation_space = gym.spaces.Box(low=low,
                                                 high=high,
                                                 shape=obs_space_n,
                                                 dtype=np.float32)
-
-        # TODO: when is the self.twap calculated? cuz' here is zero and then... i set the range like below. Fernando: I think the easiest is to update it at every step()
 
         self.action_space = action_space
 

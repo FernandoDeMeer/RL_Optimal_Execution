@@ -14,10 +14,11 @@ TODO:
 
 class HistoricalOrderBookEnv(BaseEnv):
 
-    def __init__(self, data_feed, T_max, nr_of_lobs, lob_depth, qty_to_trade, trade_direction,
-                 max_steps, steps_per_episode, burn_in_period):
+    def __init__(self, data_feed, max_steps, trade_direction, qty_to_trade,
+                   steps_per_episode, obs_space_config, action_space, burn_in_period):
 
-        super().__init__(data_feed, max_steps, trade_direction, qty_to_trade, steps_per_episode, nr_of_lobs, lob_depth)
+        super().__init__(data_feed, max_steps, trade_direction, qty_to_trade,
+                         steps_per_episode,obs_space_config,action_space,)
 
 
     def execute_action_on_engine(self, signal):
