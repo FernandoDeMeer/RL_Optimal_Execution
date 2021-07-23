@@ -1,148 +1,205 @@
 import gym
+import random
 import numpy as np
 from gym.utils import seeding
-from env.orderbook import OrderBook
 from decimal import Decimal
 from abc import ABC, abstractmethod
+
+
+def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
+    bid_prices = lob.bids.prices[-depth:]
+    bid_volumes = [float(lob.bids.get_price_list(p).volume) for p in bid_prices]
+    bid_prices = [float(bids) for bids in bid_prices]
+    ask_prices = lob.asks.prices[:depth]
+    ask_volumes = [float(lob.asks.get_price_list(p).volume) for p in ask_prices]
+    ask_prices = [float(asks) for asks in ask_prices]
+    if norm_price:
+        prices = np.array(bid_prices + ask_prices) / float(norm_price)
+    if norm_vol_bid and norm_vol_ask:
+        volumes = np.concatenate((np.array(bid_volumes)/float(norm_vol_bid),
+                            np.array(ask_volumes)/float(norm_vol_ask)), axis=0)
+    return np.concatenate((prices, volumes), axis=0)
 
 
 class BaseEnv(gym.Env, ABC):
 
     def __init__(self,
                  data_feed,
-                 max_steps,
                  trade_direction,
                  qty_to_trade,
-                 steps_per_episode,
-                 obs_space_config,
+                 max_step_range,
+                 benchmark_algo,
+                 broker,
+                 obs_config,
                  action_space,
                  ):
 
-        self.matching_order_engine = OrderBook()
-
+        # object returning snapshots of limit order books
         self.data_feed = data_feed
-        self.gui = None
 
-        self.max_steps = max_steps
+        # Parameters of the execution algos
         self.trade_direction = trade_direction # 1 for buying, -1 for selling.
         self.qty_to_trade = qty_to_trade
-        self.steps_per_episode = steps_per_episode
+        self.max_step_range = max_step_range
 
-        self.remaining_qty_to_trade = 0
-        self.remaining_steps = 0
+        self.obs_config = obs_config
+        self.reset()
 
-        """
-        Observation Space Config Parameters
-        
-        nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
-        lob_depth : int, Depth of the LOB to be in each snapshot 
-        norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
-        
-        """
+        self.build_observation_space()
 
-        self.nr_of_lobs = obs_space_config.nr_of_lobs
-        self.lob_depth = obs_space_config.lob_depth
-        self.norm = obs_space_config.norm
-
-        # self.current_total_steps = 0
-
-        self.twap = 0
-        self.price = 0
-        self.state = None
-        self.done = False
-
-        # the ... + 2 represents: remaining_qty_to_trade and remaining_steps_per_episode
-        obs_space_n = self.nr_of_lobs * self.lob_depth * 4 + 2
-
-        """
-        If the obs_space is normalized the bounds are as follows: 
-        
-            asks_volume > 0
-            asks_price >= 1
-            bids_volume > 0
-            bids_price <= 1
-            remaining_qty_to_trade > 0
-            remaining_time > 0 
-        """
-
-
-        zeros = np.zeros(self.lob_depth)
-        ones = np.ones(self.lob_depth)
-
-        if self.norm:
-
-            low = np.concatenate((zeros,ones,
-                                  zeros,zeros,0,0),axis=0)
-
-            high = np.concatenate((ones*np.inf,ones*np.inf,
-                                   ones*np.inf,ones,self.qty_to_trade,
-                                   self.steps_per_episode), axis= 0)
-        else:
-
-            low = np.append(np.zeros(obs_space_n-2), [-np.inf, 0], axis=0)
-
-            high = np.ones(obs_space_n) * np.inf
-
-
-        assert low.shape == high.shape == obs_space_n
-        self.observation_space = gym.spaces.Box(low=low,
-                                                high=high,
-                                                shape=obs_space_n,
-                                                dtype=np.float32)
-
+        benchmark_algo.set_base_parameters(trade_direction,
+                                           qty_to_trade,
+                                           self.max_steps)
+        self.benchmark_algo = benchmark_algo
+        self.broker = broker
         self.action_space = action_space
 
-        self.reset()
         self.seed()
 
     def reset(self):
 
-        # self.observer.draw_random_observations() todo: do we need this? Fernando: Depends, if we're going to train online only then we don't, but if we're going to do offline (i.e. bootstrapping then yes)
+        # reset the remaining quantitiy to trade and the time counter
+        self.time = 0
+        self.qty_remaining = self.qty_to_trade
+        if isinstance(self.max_step_range, range):
+            self.max_steps = random.sample(self.max_step_range, 1)[0]
+        else:
+            self.max_steps = self.max_step_range
+        self.remaining_steps = self.max_steps
 
-        self.matching_order_engine = OrderBook()
+        # get a snapshot of the Limit Order Book.
+        lob_hist = self.data_feed.lob_snapshot(past_n=self.obs_config['nr_of_lobs'],
+                                               future_n=self.max_steps,
+                                               depth=self.obs_config['lob_depth'])
 
-        self.remaining_qty_to_trade = self.qty_to_trade
-        self.remaining_steps = self.steps_per_episode
+        # store this in two separate histories (allows observation space to see past LOB-snapshots)
+        self.lob_hist_rl = lob_hist
+        self.lob_hist_bmk = lob_hist
 
-        self.twap = 0
+        self.execution_prices_rl = []
+        self.execution_prices_bmk = []
+        # build observation space
         self.state = self.build_observation()
+        self.reward = 0
         self.done = False
+        self.info = {}
+
+        return self.state
 
     def step(self, action):
-        assert self.done == False, ('reset() must be called before step()')
 
-        self.remaining_qty_to_trade = self.execute_action_on_engine(action)
-        self.state = self.build_observation()
-        self.twap = self.calc_twap()
+        assert self.done is False, (
+            'reset() must be called before step()')
 
-        # self.current_total_steps += 1
+        place_order_rl = {'type': 'market',
+                          'timestamp': self.time,
+                          'side': 'bid' if self.trade_direction == 1 else 'ask',
+                          'quantity': Decimal(float(action[0])),
+                          'trade_id': 1}
+        place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
+
+        # place order in LOB and replace LOB history with current trade
+        # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
+        bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
+        self.benchmark_algo.update_remainng_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
+        self.execution_prices_bmk.append(bmk_trade_dict['Execution Price'])
+
+        rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
+        self.qty_remaining = self.qty_remaining - rl_trade_dict['Volume Traded']
+        self.execution_prices_rl.append(rl_trade_dict['Execution Price'])
+        self.time += 1
         self.remaining_steps -= 1
 
-        reward = 0.
-        # if self.current_total_steps >= self.T_max - 1:
-        if self.remaining_steps == 0:
-            reward = self.calc_reward()
-
+        # incorporate sparse reward for now...
+        self.reward = self.calc_reward()
+        if self.time >= self.max_steps-1:
             self.done = True
+            self.state = []
+        else:
+            lob_next = self.data_feed.next_lob_snapshot(depth=self.obs_config['lob_depth'],
+                                                        previous_lob_snapshot=self.lob_hist_bmk[-1])
+            self.lob_hist_bmk.append(lob_next)
+            self.lob_hist_rl.append(lob_next)
+            self.state = self.build_observation()
+        self.info = {}
+        return self.state, self.reward, self.done, self.info
 
-        return self.state, reward, self.done, {}
+    def build_observation_space(self):
+
+        """
+        Observation Space Config Parameters
+
+        nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
+        lob_depth : int, Depth of the LOB to be in each snapshot
+        norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
+        """
+
+        # TO-DO:
+        # check if data_feed can provide the depth and nr_of_lobs required...
+
+        n_obs_onesided = self.obs_config['lob_depth'] * \
+                         self.obs_config['nr_of_lobs']
+        zeros = np.zeros(n_obs_onesided)
+        ones = np.ones(n_obs_onesided)
+
+        """
+            The bounds are as follows (if we allow normalisation of past LOB snapshots by current LOB data): 
+                Inf > asks_volume >= 0,
+                Inf > asks_price > 0,
+                Inf > bids_volume >= 0,
+                Inf > bids_price <= 0,
+                qty_to_trade >= remaining_qty_to_trade >= 0,
+                max_steps >= remaining_time >= 0
+        """
+        low = np.concatenate((zeros, zeros, zeros, zeros, np.array([0]), np.array([0])), axis=0)
+        high = np.concatenate((ones*np.inf, ones*np.inf,
+                               ones*np.inf, ones*np.inf,
+                               np.array([self.qty_to_trade]),
+                               np.array([self.max_steps])), axis= 0)
+
+        obs_space_n = (n_obs_onesided * 4 + 2)
+        assert low.shape[0] == high.shape[0] == obs_space_n
+        self.observation_space = gym.spaces.Box(low=low,
+                                                high=high,
+                                                shape=(obs_space_n,),
+                                                dtype=np.float64)
 
     def build_observation(self):
-
-        next_lob = self.data_feed.next_lob_snapshot(None)
-        self.sync_lob_2_engine(next_lob)
-
-        lob = self._normalize_lob(next_lob)
-
-        observation = np.concatenate((lob, [self.remaining_qty_to_trade, self.remaining_steps]))
-
-        return observation
+        # Build observation using the history of order book data
+        obs = np. array([])
+        if self.obs_config['norm']:
+            # normalize...
+            mid = (self.lob_hist_rl[-1].get_best_ask() +
+                   self.lob_hist_rl[-1].get_best_bid()) / 2
+            vol_bid = self.lob_hist_rl[-1].bids.volume
+            vol_ask = self.lob_hist_rl[-1].asks.volume
+            for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
+                obs = np.concatenate((obs, lob_to_numpy(lob,
+                                                   depth=self.obs_config['lob_depth'],
+                                                   norm_price=mid,
+                                                   norm_vol_bid=vol_bid,
+                                                   norm_vol_ask=vol_ask)), axis=0)
+        else:
+            for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
+                obs = np.concatenate(obs, (lob_to_numpy(lob,
+                                                        depth=self.obs_config['lob_depth'])), axis=0)
+        obs = np.concatenate((obs, np.array([self.qty_remaining]), np.array([self.remaining_steps])), axis=0)
+        return obs
 
     def seed(self, seed=None):
-
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+    def calc_reward(self):
+        reward = 0
+        if self.time >= self.max_steps-1:
+            twap_bmk = np.mean(self.execution_prices_bmk)
+            twap_rl = np.mean(self.execution_prices_rl)
+            if (twap_rl - twap_bmk) * self.trade_direction < 0:
+                reward = 1
+        return reward
+
+    """
     def calc_twap(self):
         # TODO: Need to access here the current LOB (before the action is taken), the twap and the total number of steps per episode.
         if self.trade_direction == 1:
@@ -150,35 +207,17 @@ class BaseEnv(gym.Env, ABC):
             self.twap = self.twap + self.state[0]/self.steps_per_episode
         elif self.trade_direction == -1:
             self.twap = self.twap + self.state[2*self.lob_depth]/self.steps_per_episode
-
         return self.twap
-
-
+    
     @abstractmethod
     def execute_action_on_engine(self, action):
         pass
 
-    def calc_reward(self):
-        reward = 0
-        if self.trade_direction == 1:
-            # We are buying, so we want to have a lower price than the twap
-            if self.twap < self.price:
-                reward = 1
-        elif self.trade_direction == -1:
-            # We are selling, so we want to have a lower price than the twap
-            if self.twap > self.price:
-                reward = 1
-
-        return reward
-
-
     @abstractmethod
     def sync_lob_2_engine(self, lob):
         pass
-
-    @abstractmethod
-    def normalize_lob(self, lob):
-        pass
-
+        
     def register_gui(self, gui):
         self.gui = gui
+        
+    """
