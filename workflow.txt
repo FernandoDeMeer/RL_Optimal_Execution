@@ -10,3 +10,4 @@ prices of the agent and benchmark algorithm. -- Florin
 -- Get the Datafeed up and running --Florin
 -- Keep the Broker class as an attribute of the environment and have it manage the execution of orders (we will implement fancy execution aspects later) -- Chris
 -- GUI/Render: PyQT library to monitor training graphs/ Tensorboard from RLLib to monitor training prices -- Florin
+-- Provide Unittests to check for proper functionality of the implemented logic -- Chris
