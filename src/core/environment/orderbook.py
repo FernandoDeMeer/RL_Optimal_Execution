@@ -2,7 +2,7 @@ import sys
 from collections import deque # a faster insert/pop queue
 from six.moves import cStringIO as StringIO
 from decimal import Decimal
-from env.ordertree import OrderTree
+from src.core.environment.ordertree import OrderTree
 
 
 class OrderBook(object):
