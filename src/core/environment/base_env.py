@@ -13,11 +13,18 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     ask_prices = lob.asks.prices[:depth]
     ask_volumes = [float(lob.asks.get_price_list(p).volume) for p in ask_prices]
     ask_prices = [float(asks) for asks in ask_prices]
+
     if norm_price:
-        prices = np.array(bid_prices + ask_prices) / float(norm_price)
+        prices = np.array(bid_prices + ask_prices) / float(norm_price) #have to make sure bid_prices and ask_prices are lists
+    else:
+        prices = np.array(bid_prices + ask_prices)
+
     if norm_vol_bid and norm_vol_ask:
         volumes = np.concatenate((np.array(bid_volumes)/float(norm_vol_bid),
                             np.array(ask_volumes)/float(norm_vol_ask)), axis=0)
+    else:
+        volumes = np.concatenate((np.array(bid_volumes),
+                                  np.array(ask_volumes)), axis=0)
     return np.concatenate((prices, volumes), axis=0)
 
 
@@ -77,6 +84,7 @@ class BaseEnv(gym.Env, ABC):
         self.lob_hist_bmk = lob_hist
 
         self.execution_prices_rl = []
+        self.volumes_rl = []
         self.execution_prices_bmk = []
         # build observation space
         self.state = self.build_observation()
@@ -101,11 +109,12 @@ class BaseEnv(gym.Env, ABC):
         # place order in LOB and replace LOB history with current trade
         # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
         bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
-        self.benchmark_algo.update_remainng_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
+        self.benchmark_algo.update_remaining_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
         self.execution_prices_bmk.append(bmk_trade_dict['Execution Price'])
 
         rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['Volume Traded']
+        self.volumes_rl.append(rl_trade_dict['Volume Traded'])
         self.execution_prices_rl.append(rl_trade_dict['Execution Price'])
         self.time += 1
         self.remaining_steps -= 1
@@ -144,10 +153,10 @@ class BaseEnv(gym.Env, ABC):
 
         """
             The bounds are as follows (if we allow normalisation of past LOB snapshots by current LOB data): 
-                Inf > asks_volume >= 0,
+                Inf > bids_price <= 0,
                 Inf > asks_price > 0,
                 Inf > bids_volume >= 0,
-                Inf > bids_price <= 0,
+                Inf > asks_volume >= 0,
                 qty_to_trade >= remaining_qty_to_trade >= 0,
                 max_steps >= remaining_time >= 0
         """
@@ -192,9 +201,10 @@ class BaseEnv(gym.Env, ABC):
 
     def calc_reward(self):
         reward = 0
+        volumes_rl_array = np.array(self.volumes_rl)
         if self.time >= self.max_steps-1:
             twap_bmk = np.mean(self.execution_prices_bmk)
-            twap_rl = np.mean(self.execution_prices_rl)
+            twap_rl = np.mean((self.execution_prices_rl* volumes_rl_array)/np.sum(volumes_rl_array))
             if (twap_rl - twap_bmk) * self.trade_direction < 0:
                 reward = 1
         return reward

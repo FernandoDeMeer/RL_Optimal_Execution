@@ -23,7 +23,7 @@ class ExecutionAlgo(ABC):
     def get_order_at_time(self, step, trade_id=None):
         NotImplementedError
 
-    def update_remainng_volume(self, volume):
+    def update_remaining_volume(self, volume):
         self.qty_remaining -= volume
 
 
