@@ -5,8 +5,8 @@ from app import RLOptimalTradeExecutionApp
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--data_folder',
-                    default='data/',
+parser.add_argument('--data_dir',
+                    default='data_dir/',
                     help="Data location.",
                     type=str)
 

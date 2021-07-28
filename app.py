@@ -33,8 +33,13 @@ class RLOptimalTradeExecutionApp:
     def _init_data_feed(self, data_feed_type):
 
         if data_feed_type == HISTORICAL_DATA_FEED:
-            data_feed = HistoricalDataFeed()
-            # ... .
+
+            return HistoricalDataFeed(data_dir=self.params["data_dir"],
+                                      instrument='btcusdt',
+                                      lob_depth=self.params["lob_depth"],
+                                      start_day=None,
+                                      end_day=None)
+
             return data_feed
         elif data_feed_type == GAN_LOB_DATA_FEED:
             ## init GAN-LOB and train before, if necessary.
@@ -80,5 +85,3 @@ class RLOptimalTradeExecutionApp:
             action_space = gym.spaces.Discrete(shape=50,
                                                     dtype=np.float32)
         return action_space
-
-

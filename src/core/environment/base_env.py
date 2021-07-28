@@ -4,6 +4,7 @@ import numpy as np
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC, abstractmethod
+from src.environment.analyzer import DataAnalyzer
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -61,6 +62,8 @@ class BaseEnv(gym.Env, ABC):
         self.broker = broker
         self.action_space = action_space
 
+        self.data_analyzer = DataAnalyzer(["benchmark", "rl"])
+
         self.seed()
 
     def reset(self):
@@ -75,9 +78,10 @@ class BaseEnv(gym.Env, ABC):
         self.remaining_steps = self.max_steps
 
         # get a snapshot of the Limit Order Book.
-        lob_hist = self.data_feed.lob_snapshot(past_n=self.obs_config['nr_of_lobs'],
-                                               future_n=self.max_steps,
-                                               depth=self.obs_config['lob_depth'])
+        lob_hist = self.data_feed.next_lob_snapshot()
+        # lob_snapshot(past_n=self.obs_config['nr_of_lobs'],
+        #                                        future_n=self.max_steps,
+        #                                        depth=self.obs_config['lob_depth'])
 
         # store this in two separate histories (allows observation space to see past LOB-snapshots)
         self.lob_hist_rl = lob_hist
@@ -125,11 +129,18 @@ class BaseEnv(gym.Env, ABC):
             self.done = True
             self.state = []
         else:
-            lob_next = self.data_feed.next_lob_snapshot(depth=self.obs_config['lob_depth'],
-                                                        previous_lob_snapshot=self.lob_hist_bmk[-1])
+            lob_next = self.data_feed.next_lob_snapshot()
+            # .next_lob_snapshot(depth=self.obs_config['lob_depth'],
+            #                                             previous_lob_snapshot=self.lob_hist_bmk[-1])
             self.lob_hist_bmk.append(lob_next)
             self.lob_hist_rl.append(lob_next)
             self.state = self.build_observation()
+
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=.0)
+        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=.0)
+        # ...
+        self.data_analyzer.calc()
+
         self.info = {}
         return self.state, self.reward, self.done, self.info
 
@@ -152,7 +163,7 @@ class BaseEnv(gym.Env, ABC):
         ones = np.ones(n_obs_onesided)
 
         """
-            The bounds are as follows (if we allow normalisation of past LOB snapshots by current LOB data): 
+            The bounds are as follows (if we allow normalisation of past LOB snapshots by current LOB data):
                 Inf > bids_price <= 0,
                 Inf > asks_price > 0,
                 Inf > bids_volume >= 0,
@@ -218,7 +229,7 @@ class BaseEnv(gym.Env, ABC):
         elif self.trade_direction == -1:
             self.twap = self.twap + self.state[2*self.lob_depth]/self.steps_per_episode
         return self.twap
-    
+
     @abstractmethod
     def execute_action_on_engine(self, action):
         pass
@@ -226,8 +237,8 @@ class BaseEnv(gym.Env, ABC):
     @abstractmethod
     def sync_lob_2_engine(self, lob):
         pass
-        
+
     def register_gui(self, gui):
         self.gui = gui
-        
+
     """
