@@ -1,6 +1,7 @@
 from src.data.data_feed import DataFeed
 import numpy as np
 from os import listdir
+import random
 
 
 class HistoricalDataFeed(DataFeed):
@@ -21,20 +22,20 @@ class HistoricalDataFeed(DataFeed):
         self.lob_depth = lob_depth
 
         self.binary_files = listdir("{}/{}".format(data_dir, instrument))
-        self.binary_file_idx = 0
+        self.binary_file_idx = None
 
         self.data = None
-        self.data_row_idx = 0
-        self.remaining_rows_in_file = -1
+        self.data_row_idx = None
+        self.remaining_rows_in_file = None
+        self._row_buffer = None
 
     def next_lob_snapshot(self, previous_lob_snapshot=None):
 
+        assert self.remaining_rows_in_file is not None, (
+            'reset() must be called once before next_lob_snapshot()')
+
         if self.remaining_rows_in_file < 0:
-            if self.binary_file_idx < len(self.binary_files):
-                self._load_data()
-            else:
-                # no binary files left to process
-                return 0, None
+            self.reset(self._row_buffer)
 
         lob = self.data[self.data_row_idx]
 
@@ -45,30 +46,115 @@ class HistoricalDataFeed(DataFeed):
         lob = lob[1:]
         return int(timestamp), lob.reshape(-1, self.lob_depth)
 
+    def reset(self, row_buffer=None):
+        """
+        Logic for the reset method:
+            * Decide what files to choose whenever reset is called
+            * Check if the file index exists
+                * if so, load data...
+            * Decide what row to start reading data from
+            * Determine remaining number of rows
+
+        """
+        if not self.binary_file_idx:
+            self.binary_file_idx = 0
+        else:
+            self.binary_file_idx += 1
+
+        if self.binary_file_idx < len(self.binary_files):
+            self._load_data()
+        else:
+            # no binary files left to process
+            return 0, None
+
+        self.data_row_idx = 0
+        self.remaining_rows_in_file = self.data.shape[0]
+
     def _load_data(self):
 
         self.data = np.fromfile("{}/{}/{}".format(self.data_dir,
                                                   self.instrument,
                                                   self.binary_files[self.binary_file_idx]), dtype=np.float64)
         self.data = self.data.reshape(-1, 4 * self.lob_depth + 1)
-        self.remaining_rows_in_file = self.data.shape[0]
-        self.data_row_idx = 0
 
-        self.binary_file_idx += 1
+
+class HistFeedRL(HistoricalDataFeed):
+    """
+    Example of a derived class that allows...
+        * ...training on one single day of data without changing the file (could also be made
+        possible via the start and end date I suppose, if that's the idea of those...)
+        * ...at each reset, draw starting time (t0) randomly from 0 to len(data)
+        * include a row_buffer to reflect no allowed trading if not enough time is
+        left at the end of the day.
+
+    """
+    def __init__(self, data_dir, instrument, lob_depth, start_day, end_day):
+        super(HistFeedRL, self).__init__(data_dir,
+                                         instrument,
+                                         lob_depth,
+                                         start_day,
+                                         end_day)
+
+    def reset(self, row_buffer=None):
+        print("Reset has been called !!!")
+        print("Going to sleep for 5 seconds")
+        import time
+        time.sleep(5)
+        if not row_buffer:
+            row_buffer = 0
+        self._row_buffer = row_buffer
+
+        if not self.binary_file_idx:
+            self.binary_file_idx = 0
+
+        if self.binary_file_idx < len(self.binary_files):
+            self._load_data()
+        else:
+            # no binary files left to process
+            return 0, None
+
+        self.data_row_idx = random.randint(0, self.data.shape[0] - row_buffer)
+        self.remaining_rows_in_file = self.data.shape[0] - self.data_row_idx
+
+
+"""    
+    feed = HistoricalDataFeed(data_dir='/Users/florindascalu/data/iwa/LOBProcessing/data/binary',
+                              instrument='btcusdt',
+                              lob_depth=10,
+                              start_day=None,
+                              end_day=None)
+    feed.reset()
+    while True:
+
+        timestamp, lob = feed.next_lob_snapshot()
+        # lob shape is (4, 20)
+
+        if lob is None:
+            break
+
+        print(lob)
+"""
 
 """
-feed = HistoricalDataFeed(data_dir='/Users/florindascalu/data/iwa/LOBProcessing/data/binary',
-                          instrument='btcusdt',
-                          lob_depth=20,
-                          start_day=None,
-                          end_day=None)
-while True:
+Example code for testing the derived class
 
-    timestamp, lob = feed.next_lob_snapshot()
-    # lob shape is (4, 20)
+if __name__ == "__main__":
 
-    if lob is None:
-        break
+    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution\\data_dir'
+    feed = HistFeedRL(data_dir=dir,
+                      instrument='btc_usdt',
+                      lob_depth=20,
+                      start_day=None,
+                      end_day=None)
 
-    print(lob)
+    feed.reset(row_buffer=200)
+    while True:
+
+        timestamp, lob = feed.next_lob_snapshot()
+        # lob shape is (4, 20)
+
+        if lob is None:
+            break
+
+        print(lob)
 """
