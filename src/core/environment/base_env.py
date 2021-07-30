@@ -78,14 +78,12 @@ class BaseEnv(gym.Env, ABC):
         self.remaining_steps = self.max_steps
 
         # get a snapshot of the Limit Order Book.
-        lob_hist = self.data_feed.next_lob_snapshot()
-        # lob_snapshot(past_n=self.obs_config['nr_of_lobs'],
-        #                                        future_n=self.max_steps,
-        #                                        depth=self.obs_config['lob_depth'])
+        self.data_feed.reset(row_buffer=self.max_steps)
+        _, lob_hist = self.data_feed.next_lob_snapshot()
 
         # store this in two separate histories (allows observation space to see past LOB-snapshots)
-        self.lob_hist_rl = lob_hist
-        self.lob_hist_bmk = lob_hist
+        self.lob_hist_rl = [lob_hist]
+        self.lob_hist_bmk = [lob_hist]
 
         self.data_analyzer.reset()
 
@@ -105,7 +103,7 @@ class BaseEnv(gym.Env, ABC):
         place_order_rl = {'type': 'market',
                           'timestamp': self.time,
                           'side': 'bid' if self.trade_direction == 1 else 'ask',
-                          'quantity': Decimal(float(action[0])),
+                          'quantity': Decimal(str(action[0])),
                           'trade_id': 1}
         place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
@@ -115,11 +113,7 @@ class BaseEnv(gym.Env, ABC):
         rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
 
         # Update the analyzer
-        self.benchmark_algo.update_remaining_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=bmk_trade_dict['pxs'])
-        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=rl_trade_dict['pxs'])
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="qty", value=bmk_trade_dict['qty'])
-        self.data_analyzer.record_step(algo_id="rl", key_name="qty", value=rl_trade_dict['qty'])
+        self._record_step(bmk_trade_dict, rl_trade_dict)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
 
         self.time += 1
@@ -131,9 +125,7 @@ class BaseEnv(gym.Env, ABC):
             self.done = True
             self.state = []
         else:
-            lob_next = self.data_feed.next_lob_snapshot()
-            # .next_lob_snapshot(depth=self.obs_config['lob_depth'],
-            #                                             previous_lob_snapshot=self.lob_hist_bmk[-1])
+            _, lob_next = self.data_feed.next_lob_snapshot()
             self.lob_hist_bmk.append(lob_next)
             self.lob_hist_rl.append(lob_next)
             self.state = self.build_observation()
@@ -201,6 +193,11 @@ class BaseEnv(gym.Env, ABC):
                 obs = np.concatenate(obs, (lob_to_numpy(lob,
                                                         depth=self.obs_config['lob_depth'])), axis=0)
         obs = np.concatenate((obs, np.array([self.qty_remaining]), np.array([self.remaining_steps])), axis=0)
+
+        # need to make sure that obs fits to the observation space...
+        # 0 padding whenever this gets smaller...
+        # NaN in the beginning if I don't have history yet...
+
         return obs
 
     def seed(self, seed=None):
@@ -215,3 +212,14 @@ class BaseEnv(gym.Env, ABC):
                 reward = 1
         return reward
 
+    def _record_step(self, bmk, rl):
+
+        # update the volume of the benchmark algo
+        self.benchmark_algo.update_remaining_volume(bmk['qty']) # this is odd to do here...
+
+        # update the analyzer
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
+
+        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
+        self.data_analyzer.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
