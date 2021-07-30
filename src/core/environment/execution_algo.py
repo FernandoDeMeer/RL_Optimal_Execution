@@ -46,7 +46,7 @@ class TWAPAlgo(ExecutionAlgo):
         place_order = {'type': 'market',
                        'timestamp': step,
                        'side': side,
-                       'quantity': Decimal(self.volume_at_time),
+                       'quantity': Decimal(str(self.volume_at_time)),
                        'trade_id': trade_id}
         self.placed_orders.append(place_order)
         return place_order
