@@ -35,7 +35,7 @@ class HistoricalDataFeed(DataFeed):
         assert self.remaining_rows_in_file is not None, (
             'reset() must be called once before next_lob_snapshot()')
 
-        if self.remaining_rows_in_file < 0:
+        if self.remaining_rows_in_file <= 0:
             self.reset(self._row_buffer)
 
         lob = self.data[self.data_row_idx]
@@ -121,7 +121,7 @@ class HistFeedRL(HistoricalDataFeed):
         self.remaining_rows_in_file = self.data.shape[0] - self.data_row_idx
 
 
-"""    
+"""
     feed = HistoricalDataFeed(data_dir='/Users/florindascalu/data/iwa/LOBProcessing/data/binary',
                               instrument='btcusdt',
                               lob_depth=10,

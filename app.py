@@ -39,8 +39,6 @@ class RLOptimalTradeExecutionApp:
                                       lob_depth=self.params["lob_depth"],
                                       start_day=None,
                                       end_day=None)
-
-            return data_feed
         elif data_feed_type == GAN_LOB_DATA_FEED:
             ## init GAN-LOB and train before, if necessary.
             return None
