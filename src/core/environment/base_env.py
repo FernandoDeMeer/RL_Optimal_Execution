@@ -4,7 +4,7 @@ import numpy as np
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC, abstractmethod
-from src.environment.analyzer import DataAnalyzer
+from src.core.environment.analyzer import DataAnalyzer
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
