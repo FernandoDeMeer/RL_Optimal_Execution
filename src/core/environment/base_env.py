@@ -5,6 +5,7 @@ from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC, abstractmethod
 from src.core.environment.analyzer import DataAnalyzer
+from src.core.environment.broker import Broker
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -37,7 +38,6 @@ class BaseEnv(gym.Env, ABC):
                  qty_to_trade,
                  max_step_range,
                  benchmark_algo,
-                 broker,
                  obs_config,
                  action_space,
                  ):
@@ -61,7 +61,7 @@ class BaseEnv(gym.Env, ABC):
                                            qty_to_trade,
                                            self.max_steps)
         self.benchmark_algo = benchmark_algo
-        self.broker = broker
+        self.broker = Broker()
         self.action_space = action_space
 
         self.seed()

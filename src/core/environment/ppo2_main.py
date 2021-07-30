@@ -3,10 +3,8 @@ import gym
 import numpy as np
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines import PPO2
-from src.core.environment.broker import Broker
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
-from src.core.environment.lob_simulator import LOBSimulator
 from src.data.historical_data_feed import HistFeedRL
 
 
@@ -21,7 +19,6 @@ if __name__ == '__main__':
                           end_day=None)
 
     benchmark = TWAPAlgo()  # define benchmark algo
-    broker = Broker()  # set up a broker class
     volume = 3  # total volume to trade
     trade_steps = 50  # total number of time steps available to trade
 
@@ -40,7 +37,6 @@ if __name__ == '__main__':
                       qty_to_trade=3,
                       max_step_range=50,
                       benchmark_algo=benchmark,
-                      broker=broker,
                       obs_config=observation_space_config,
                       action_space=action_space)
 
