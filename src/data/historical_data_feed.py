@@ -1,7 +1,8 @@
-from src.data.data_feed import DataFeed
 import numpy as np
 from os import listdir
 import random
+from src.data.data_feed import DataFeed
+from src.core.environment.env_utils import raw_to_order_book
 
 
 class HistoricalDataFeed(DataFeed):
@@ -29,7 +30,7 @@ class HistoricalDataFeed(DataFeed):
         self.remaining_rows_in_file = None
         self._row_buffer = None
 
-    def next_lob_snapshot(self, previous_lob_snapshot=None):
+    def next_lob_snapshot(self, previous_lob_snapshot=None, lob_format=True):
 
         assert self.remaining_rows_in_file is not None, (
             'reset() must be called once before next_lob_snapshot()')
@@ -44,7 +45,13 @@ class HistoricalDataFeed(DataFeed):
 
         timestamp = lob[0]
         lob = lob[1:]
-        return int(timestamp), lob.reshape(-1, self.lob_depth)
+        if lob_format:
+            lob_out = raw_to_order_book(current_book=lob.reshape(-1, self.lob_depth),
+                                    time=int(timestamp),
+                                    depth=self.lob_depth)
+            return int(timestamp), lob_out
+        else:
+            return int(timestamp), lob.reshape(-1, self.lob_depth)
 
     def reset(self, row_buffer=None):
         """

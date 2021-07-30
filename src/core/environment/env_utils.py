@@ -1,8 +1,8 @@
-from decimal import Decimal
 from src.core.environment.orderbook import OrderBook
+from decimal import Decimal
 
 
-def split_book_to_orders(current_book):
+def split_book_to_orders(current_book, time, depth):
     """ Splits existing order book data into individual bid and ask orders """
 
     # pre-allocate
@@ -10,40 +10,47 @@ def split_book_to_orders(current_book):
     ask_orders = []
 
     # get meta info
-    time_stamp = current_book["T"]
     trade_id = 0
 
+    # extract ask orders
+    for ask_idx in range(0, min(depth, len(current_book[0]))):
+        ask_order = {'type' : 'limit',
+                     'timestamp': time,
+                     'side' : 'ask',
+                     'quantity' : Decimal(str(current_book[1][ask_idx])),
+                     'price' : Decimal(str(current_book[0][ask_idx])),
+                     'trade_id' : trade_id}
+        trade_id += 1
+        ask_orders.append(ask_order)
+
     # extract bid orders
-    for bid in current_book["b"]:
+    for bid_idx in range(0, min(depth, len(current_book[2]))):
         bid_order = {'type' : 'limit',
-                     'time_stamp': time_stamp,
+                     'time_stamp': time,
                      'side' : 'bid',
-                     'quantity' : Decimal(bid[1]),
-                     'price' : Decimal(bid[0]),
+                     'quantity' : Decimal(str(current_book[3][bid_idx])),
+                     'price' : Decimal(str(current_book[2][bid_idx])),
                      'trade_id' : trade_id}
         trade_id += 1
         bid_orders.append(bid_order)
 
-    # extract ask orders
-    for ask in current_book["a"]:
-        ask_order = {'type' : 'limit',
-                     'timestamp': time_stamp,
-                     'side' : 'ask',
-                     'quantity' : Decimal(ask[1]),
-                     'price' : Decimal(ask[0]),
-                     'trade_id' : trade_id}
-        trade_id += 1
-        ask_orders.append(ask_order)
     all_orders = bid_orders + ask_orders
-
     return bid_orders, ask_orders, all_orders
 
 
-def raw_to_order_book(current_book, depth):
-    order_book = OrderBook()
-    bid_orders, ask_orders, _ = split_book_to_orders(current_book)
+def raw_to_order_book(current_book, time, depth):
+    """ Convert the raw LOB data into an OrderBook object """
 
+    # transfer numerical data to orders
+    _, _, all_orders = split_book_to_orders(current_book, time, depth)
+    order_book = OrderBook()
+    for orders in all_orders:
+        _, _ = order_book.process_order(orders, False, False)
+
+    # place orders in OrderBook class
+    """
     counter = 1
+    order_book = OrderBook()
     for bids in bid_orders:
         _, _ = order_book.process_order(bids, False, False)
         counter += 1
@@ -56,4 +63,6 @@ def raw_to_order_book(current_book, depth):
         counter += 1
         if counter > depth:
             break
+    """
+    # check that the order book has been generated correctly and nothing has been cancelled...
     return order_book
