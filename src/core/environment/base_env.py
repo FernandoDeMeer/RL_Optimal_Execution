@@ -50,6 +50,8 @@ class BaseEnv(gym.Env, ABC):
         self.qty_to_trade = qty_to_trade
         self.max_step_range = max_step_range
 
+        self.data_analyzer = DataAnalyzer(["benchmark", "rl"])
+
         self.obs_config = obs_config
         self.reset()
 
@@ -61,8 +63,6 @@ class BaseEnv(gym.Env, ABC):
         self.benchmark_algo = benchmark_algo
         self.broker = broker
         self.action_space = action_space
-
-        self.data_analyzer = DataAnalyzer(["benchmark", "rl"])
 
         self.seed()
 
@@ -87,9 +87,8 @@ class BaseEnv(gym.Env, ABC):
         self.lob_hist_rl = lob_hist
         self.lob_hist_bmk = lob_hist
 
-        self.execution_prices_rl = []
-        self.volumes_rl = []
-        self.execution_prices_bmk = []
+        self.data_analyzer.reset()
+
         # build observation space
         self.state = self.build_observation()
         self.reward = 0
@@ -113,13 +112,16 @@ class BaseEnv(gym.Env, ABC):
         # place order in LOB and replace LOB history with current trade
         # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
         bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
-        self.benchmark_algo.update_remaining_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
-        self.execution_prices_bmk.append(bmk_trade_dict['Execution Price'])
-
         rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
-        self.qty_remaining = self.qty_remaining - rl_trade_dict['Volume Traded']
-        self.volumes_rl.append(rl_trade_dict['Volume Traded'])
-        self.execution_prices_rl.append(rl_trade_dict['Execution Price'])
+
+        # Update the analyzer
+        self.benchmark_algo.update_remaining_volume(bmk_trade_dict['Volume Traded']) # this is odd to do here...
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=bmk_trade_dict['pxs'])
+        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=rl_trade_dict['pxs'])
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="qty", value=bmk_trade_dict['qty'])
+        self.data_analyzer.record_step(algo_id="rl", key_name="qty", value=rl_trade_dict['qty'])
+        self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
+
         self.time += 1
         self.remaining_steps -= 1
 
@@ -135,11 +137,6 @@ class BaseEnv(gym.Env, ABC):
             self.lob_hist_bmk.append(lob_next)
             self.lob_hist_rl.append(lob_next)
             self.state = self.build_observation()
-
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=.0)
-        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=.0)
-        # ...
-        self.data_analyzer.calc()
 
         self.info = {}
         return self.state, self.reward, self.done, self.info
@@ -212,33 +209,9 @@ class BaseEnv(gym.Env, ABC):
 
     def calc_reward(self):
         reward = 0
-        volumes_rl_array = np.array(self.volumes_rl)
         if self.time >= self.max_steps-1:
-            twap_bmk = np.mean(self.execution_prices_bmk)
-            twap_rl = np.mean((self.execution_prices_rl* volumes_rl_array)/np.sum(volumes_rl_array))
-            if (twap_rl - twap_bmk) * self.trade_direction < 0:
+            vwaps = self.data_analyzer.calc_vwaps()
+            if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
                 reward = 1
         return reward
 
-    """
-    def calc_twap(self):
-        # TODO: Need to access here the current LOB (before the action is taken), the twap and the total number of steps per episode.
-        if self.trade_direction == 1:
-            # We are buying, so the twap is updated according to the best ask prices
-            self.twap = self.twap + self.state[0]/self.steps_per_episode
-        elif self.trade_direction == -1:
-            self.twap = self.twap + self.state[2*self.lob_depth]/self.steps_per_episode
-        return self.twap
-
-    @abstractmethod
-    def execute_action_on_engine(self, action):
-        pass
-
-    @abstractmethod
-    def sync_lob_2_engine(self, lob):
-        pass
-
-    def register_gui(self, gui):
-        self.gui = gui
-
-    """

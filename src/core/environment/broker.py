@@ -27,5 +27,5 @@ class Broker(ABC):
             else:
                 vol_wgt_price, vol = 0, 0
 
-        out_dict = {'LOB': lob, 'Execution Price': vol_wgt_price, 'Volume Traded': vol}
+        out_dict = {'lob': lob, 'pxs': vol_wgt_price, 'qty': vol}
         return out_dict
