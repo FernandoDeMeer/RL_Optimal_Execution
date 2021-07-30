@@ -7,15 +7,18 @@ from src.core.environment.broker import Broker
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
 from src.core.environment.lob_simulator import LOBSimulator
+from src.data.historical_data_feed import HistFeedRL
 
 
 if __name__ == '__main__':
 
     # construct a data feed (to be replaced by Florins implementation)
-    pth = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution\\src\\data\\book_depth_socket_btcusdt_2021_06_21.txt'
-    lob_feed = LOBSimulator(file_name=pth,
-                            nr_of_lobs=5,
-                            nr_of_lob_levels=20)
+    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution\\data_dir'
+    lob_feed = HistFeedRL(data_dir=dir,
+                          instrument='btc_usdt',
+                          lob_depth=20,
+                          start_day=None,
+                          end_day=None)
 
     benchmark = TWAPAlgo()  # define benchmark algo
     broker = Broker()  # set up a broker class
@@ -23,10 +26,7 @@ if __name__ == '__main__':
     trade_steps = 50  # total number of time steps available to trade
 
     # define observation config
-    observation_space_config = {}
-    observation_space_config['lob_depth'] = 20
-    observation_space_config['nr_of_lobs'] = 1
-    observation_space_config['norm'] = True
+    observation_space_config = {'lob_depth': 20, 'nr_of_lobs': 1, 'norm': True}
 
     # define action space
     action_space = gym.spaces.Box(low=0.0,
