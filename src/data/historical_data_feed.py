@@ -96,10 +96,7 @@ class HistFeedRL(HistoricalDataFeed):
                                          end_day)
 
     def reset(self, row_buffer=None):
-        print("Reset has been called !!!")
-        print("Going to sleep for 5 seconds")
-        import time
-        time.sleep(5)
+
         if not row_buffer:
             row_buffer = 0
         self._row_buffer = row_buffer
