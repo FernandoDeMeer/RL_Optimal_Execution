@@ -22,7 +22,7 @@ Currently Outstanding To-Do's:
 	* Currently, the lob_depth parameter does not work yet. (does work if LOB is returned as OrderBook class, not otherwise).
 -- Merge the dev_fixs branch back into the master branch
 -- Account for all outstanding volumes to be placed in one order at the end (and if this is not possible, a penalty based on remaining volume)
-
+-- I still feel sth is wrong with the index during environment stepping (i.e.: with self.time). Needs to be checked if the episode is over at the correct time...)
 
 Current questions... (to be discussed):
 
