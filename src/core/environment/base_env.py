@@ -100,11 +100,23 @@ class BaseEnv(gym.Env, ABC):
         assert self.done is False, (
             'reset() must be called before step()')
 
-        place_order_rl = {'type': 'market',
-                          'timestamp': self.time,
-                          'side': 'bid' if self.trade_direction == 1 else 'ask',
-                          'quantity': Decimal(str(action[0])),
-                          'trade_id': 1}
+        self.time += 1
+        self.remaining_steps -= 1
+
+        if self.time >= self.max_steps-1:
+            # We are at the end of the episode so we have to trade all our remaining inventory
+            place_order_rl = {'type': 'market',
+                              'timestamp': self.time,
+                              'side': 'bid' if self.trade_direction == 1 else 'ask',
+                              'quantity': Decimal(str(self.qty_remaining)),
+                              'trade_id': 1}
+        else:
+            #Otherwise we trade according to the agent's action
+            place_order_rl = {'type': 'market',
+                              'timestamp': self.time,
+                              'side': 'bid' if self.trade_direction == 1 else 'ask',
+                              'quantity': Decimal(str(action[0])),
+                              'trade_id': 1}
         place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
         # place order in LOB and replace LOB history with current trade
@@ -116,8 +128,6 @@ class BaseEnv(gym.Env, ABC):
         self._record_step(bmk_trade_dict, rl_trade_dict)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
 
-        self.time += 1
-        self.remaining_steps -= 1
 
         # incorporate sparse reward for now...
         self.reward = self.calc_reward()

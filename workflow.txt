@@ -1,17 +1,3 @@
-Implementation decisions/ Immediate Workflow:
-
-
--- Observation space will have a config object that will specify its shape -- Fernando
--- Action space will be an attribute of the environment declared during the run() -- Fernando
--- We will build an Analyzer class that receives the data feed in the same fashion as the agent and keeps track of execution
-prices of the agent and benchmark algorithm. -- Florin
--- Don't worry about trainers for now.
--- Merge lob_env_old with base_env and delete the discarded parts. --Chris
--- Get the Datafeed up and running --Florin
--- Keep the Broker class as an attribute of the environment and have it manage the execution of orders (we will implement fancy execution aspects later) -- Chris
--- GUI/Render: PyQT library to monitor training graphs/ Tensorboard from RLLib to monitor training prices -- Florin
--- Provide Unittests to check for proper functionality of the implemented logic -- Chris
-
 
 Currently Outstanding To-Do's:
 
@@ -22,13 +8,14 @@ Currently Outstanding To-Do's:
 	* Currently, the lob_depth parameter does not work yet. (does work if LOB is returned as OrderBook class, not otherwise).
 -- Merge the dev_fixs branch back into the master branch
 -- Account for all outstanding volumes to be placed in one order at the end (and if this is not possible, a penalty based on remaining volume)
--- I still feel sth is wrong with the index during environment stepping (i.e.: with self.time). Needs to be checked if the episode is over at the correct time...)
+-- I still feel sth is wrong with the index during environment stepping (i.e.: with self.time). Needs to be checked if the episode is over at the correct time...) Fernando: Yes, the first thing to do in step() should be to check if we are at T-1 (end of the episode)
 
 Current questions... (to be discussed):
 
--- If an agent is allowed to observe historical LOBs, the observation space becomes 'dynamic' (i.e.: some orders are taken out of the LOB and hence the depth changes. How to deal with this during training? Just padding with 0's? Does that have an effect on training?
--- Currently the data feed can not return any LOBs before the current time t (it just moves forward). Do we need to allow this?
--- Currently we can not incorporate statistics calculated from historic prices (i.e. such like current volatility of mid prices or sth like that...) Do we want to incorporate this now?
--- Rename DataAnalyzer to TradeMonitor?
+-- If an agent is allowed to observe historical LOBs, the observation space becomes 'dynamic' (i.e.: some orders are taken out of the LOB and hence the depth changes. How to deal with this during training? Just padding with 0's? Does that have an effect on training? Fernando: The depth isn't going to change when training on historic data, since the next state is always fetched by build_observation, the "modified LOB" is not used at all when fetching the next state. When training with a simulator this does come into play, and padding with 0s is the most common way to solve the variable size issue.
+-- Currently the data feed can not return any LOBs before the current time t (it just moves forward). Do we need to allow this? Fernando: This is a training choice, normally when training on historical data, the data is looped over (i.e we start at day 0, iteratively train on day n+1 until we ran out of days and then go back to 0 and repeat) as to present the agent with the "natural sequence of events",but we could consider each trading day independent and sample randomly as well.
+-- Currently we can not incorporate statistics calculated from historic prices (i.e. such like current volatility of mid prices or sth like that...) Do we want to incorporate this now? Fernando: Each statistic could be added as an attribute of the Analyzer/TradeMonitor right? Would be pretty straightforward
+-- Rename DataAnalyzer to TradeMonitor? Fernando: I think it's a good name, it's a bit more specific than DataAnalyzer, I support the name change, but maybe call it TradesMonitor with an s, since it will monitor all trades?
 -- I think within the next_lob_snapshot function, the test for if self.remaining_rows_in_file < 0: Should this be an <= sign? Could you quickly check?
+
  
