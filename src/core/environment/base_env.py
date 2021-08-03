@@ -115,7 +115,7 @@ class BaseEnv(gym.Env, ABC):
             place_order_rl = {'type': 'market',
                               'timestamp': self.time,
                               'side': 'bid' if self.trade_direction == 1 else 'ask',
-                              'quantity': Decimal(str(action[0])),
+                              'quantity': Decimal(str(action[0]*self.qty_remaining)),
                               'trade_id': 1}
         place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
@@ -220,6 +220,11 @@ class BaseEnv(gym.Env, ABC):
             vwaps = self.data_analyzer.calc_vwaps()
             if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
                 reward = 1
+            # IS = self.data_analyzer.calc_IS()
+            # if (IS['rl'] - IS['benchmark']) * self.trade_direction < 0:
+            #     reward = -1
+            # elif (IS['rl'] - 1.1*IS['benchmark']) * self.trade_direction > 0:
+            #     reward = 1
         return reward
 
     def _record_step(self, bmk, rl):
@@ -227,9 +232,17 @@ class BaseEnv(gym.Env, ABC):
         # update the volume of the benchmark algo
         self.benchmark_algo.update_remaining_volume(bmk['qty']) # this is odd to do here...
 
+        #Calculate Arrival Price
+        mid = (self.lob_hist_rl[-1].get_best_ask() +
+               self.lob_hist_rl[-1].get_best_bid()) / 2
+
         # update the analyzer
         self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
         self.data_analyzer.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
+        self.data_analyzer.record_step(algo_id="benchmark", key_name="arrival", value=mid)
+
 
         self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
         self.data_analyzer.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
+        self.data_analyzer.record_step(algo_id="rl", key_name="arrival", value=mid)
+

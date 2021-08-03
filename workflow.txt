@@ -17,5 +17,5 @@ Current questions... (to be discussed):
 -- Currently we can not incorporate statistics calculated from historic prices (i.e. such like current volatility of mid prices or sth like that...) Do we want to incorporate this now? Fernando: Each statistic could be added as an attribute of the Analyzer/TradeMonitor right? Would be pretty straightforward
 -- Rename DataAnalyzer to TradeMonitor? Fernando: I think it's a good name, it's a bit more specific than DataAnalyzer, I support the name change, but maybe call it TradesMonitor with an s, since it will monitor all trades?
 -- I think within the next_lob_snapshot function, the test for if self.remaining_rows_in_file < 0: Should this be an <= sign? Could you quickly check?
-
+-- I have looked into ways of coding the Implementation Shortfall mentioned in the End-to-End paper. They state the formula is IS= arrival_price*volume_traded - executed_price* volume_traded, but do not define what the arrival price is (Wikipedia says it's often taken as the last executed price or the midpoint) asking this to AlgoTrader will be the best way to solve this issue I think.
  

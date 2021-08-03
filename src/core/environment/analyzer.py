@@ -19,6 +19,15 @@ class DataAnalyzer:
             vwaps[algo_id] = np.sum(prices * volumes) / np.sum(volumes)
         return vwaps
 
+    def calc_IS(self):
+        IS = dict()
+        for algo_id in self.algo_ids:
+            prices = np.array(self.data[algo_id]['pxs'])
+            volumes = np.array(self.data[algo_id]['qty'])
+            arrival_prices = np.array(self.data[algo_id]['arrival'])
+            IS[algo_id] = (arrival_prices - prices)*volumes
+        return IS
+
     def calc(self):
         pass
 
