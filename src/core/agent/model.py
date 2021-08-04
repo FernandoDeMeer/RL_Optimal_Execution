@@ -3,7 +3,7 @@ from ray.rllib.utils.framework import try_import_tf
 
 tf1, tf, tfv = try_import_tf()
 
-class CustomModel(TFModelV2):
+class EndtoEndModel(TFModelV2):
     """
     LSTM architecture from "An End-to-End Optimal Trade Execution Framework
     based on Proximal Policy Optimization", adapted to RLlib's Custom model format
