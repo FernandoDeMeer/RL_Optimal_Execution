@@ -137,7 +137,7 @@ class BaseEnv(gym.Env, ABC):
 
 
         # incorporate sparse reward for now...
-        self.reward = self.calc_reward()
+        self.calc_reward(action)
         if self.time >= self.max_steps-1:
             self.done = True
             self.state = []
@@ -221,18 +221,23 @@ class BaseEnv(gym.Env, ABC):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def calc_reward(self):
-        reward = 0
+    def calc_reward(self,action):
         if self.time >= self.max_steps-1:
             vwaps = self.data_analyzer.calc_vwaps()
             if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
-                reward = 1
+                self.reward += 1
             # IS = self.data_analyzer.calc_IS()
             # if (IS['rl'] - IS['benchmark']) * self.trade_direction < 0:
-            #     reward = -1
+            #     self.reward += -1
             # elif (IS['rl'] - 1.1*IS['benchmark']) * self.trade_direction > 0:
-            #     reward = 1
-        return reward
+            #     self.reward += 1
+
+        # apply a quadratic penalty if the trading volume exceeds the available volumes of the top 5 bids
+        bids = self.lob_hist_rl[-1].bids[-5:]
+        bids_volume = np.sum([float(self.lob_hist_rl[-1].bids.get_price_list(p).volume) for p in bids])
+        action_volume = action[0]*2*(self.qty_to_trade/self.max_steps)
+        if  bids_volume < action_volume:
+            self.reward +=  -np.square(bids_volume-action_volume)
 
     def _record_step(self, bmk, rl):
 
