@@ -75,7 +75,7 @@ class RLOptimalTradeExecutionApp:
 
         if self.params["action_space"] == "Box":
 
-            action_space = gym.spaces.Box(0.0, 2 *self.broker.get_twap(),
+            action_space = gym.spaces.Box(0.0, 1,
                                                shape=1,
                                                dtype=np.float32)
         elif self.params["action_space"] == "Discrete":

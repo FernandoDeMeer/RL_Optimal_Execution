@@ -111,12 +111,19 @@ class BaseEnv(gym.Env, ABC):
                               'quantity': Decimal(str(self.qty_remaining)),
                               'trade_id': 1}
         else:
-            #Otherwise we trade according to the agent's action
-            place_order_rl = {'type': 'market',
-                              'timestamp': self.time,
-                              'side': 'bid' if self.trade_direction == 1 else 'ask',
-                              'quantity': Decimal(str(action[0]*self.qty_remaining)),
-                              'trade_id': 1}
+            #Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
+            if action[0]*2*(self.qty_to_trade/self.max_steps) < self.qty_remaining:
+                place_order_rl = {'type': 'market',
+                                  'timestamp': self.time,
+                                  'side': 'bid' if self.trade_direction == 1 else 'ask',
+                                  'quantity': Decimal(str(action[0]*2*(self.qty_to_trade/self.max_steps))),
+                                  'trade_id': 1}
+            else:
+                place_order_rl = {'type': 'market',
+                                  'timestamp': self.time,
+                                  'side': 'bid' if self.trade_direction == 1 else 'ask',
+                                  'quantity': Decimal(str(self.qty_remaining)),
+                                  'trade_id': 1}
         place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
         # place order in LOB and replace LOB history with current trade
