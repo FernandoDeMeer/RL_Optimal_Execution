@@ -4,7 +4,7 @@ import numpy as np
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC, abstractmethod
-from src.core.environment.analyzer import DataAnalyzer
+from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.broker import Broker
 
 
@@ -50,7 +50,7 @@ class BaseEnv(gym.Env, ABC):
         self.qty_to_trade = qty_to_trade
         self.max_step_range = max_step_range
 
-        self.data_analyzer = DataAnalyzer(["benchmark", "rl"])
+        self.trades_monitor = TradesMonitor(["benchmark", "rl"])
 
         self.obs_config = obs_config
         self.reset()
@@ -85,7 +85,7 @@ class BaseEnv(gym.Env, ABC):
         self.lob_hist_rl = [lob_hist]
         self.lob_hist_bmk = [lob_hist]
 
-        self.data_analyzer.reset()
+        self.trades_monitor.reset()
 
         # build observation space
         self.state = self.build_observation()
@@ -102,6 +102,7 @@ class BaseEnv(gym.Env, ABC):
 
         self.time += 1
         self.remaining_steps -= 1
+        place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
         if self.time >= self.max_steps-1:
             # We are at the end of the episode so we have to trade all our remaining inventory
@@ -112,11 +113,11 @@ class BaseEnv(gym.Env, ABC):
                               'trade_id': 1}
         else:
             #Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
-            if action[0]*2*(self.qty_to_trade/self.max_steps) < self.qty_remaining:
+            if action[0]*2*place_order_bmk.quantity < self.qty_remaining:
                 place_order_rl = {'type': 'market',
                                   'timestamp': self.time,
                                   'side': 'bid' if self.trade_direction == 1 else 'ask',
-                                  'quantity': Decimal(str(action[0]*2*(self.qty_to_trade/self.max_steps))),
+                                  'quantity': Decimal(str(action[0]*2*place_order_bmk.quantity)),
                                   'trade_id': 1}
             else:
                 place_order_rl = {'type': 'market',
@@ -124,14 +125,13 @@ class BaseEnv(gym.Env, ABC):
                                   'side': 'bid' if self.trade_direction == 1 else 'ask',
                                   'quantity': Decimal(str(self.qty_remaining)),
                                   'trade_id': 1}
-        place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
         # place order in LOB and replace LOB history with current trade
         # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
         bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
         rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
 
-        # Update the analyzer
+        # Update the trades monitor
         self._record_step(bmk_trade_dict, rl_trade_dict)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
 
@@ -223,10 +223,10 @@ class BaseEnv(gym.Env, ABC):
 
     def calc_reward(self,action):
         if self.time >= self.max_steps-1:
-            vwaps = self.data_analyzer.calc_vwaps()
+            vwaps = self.trades_monitor.calc_vwaps()
             if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
                 self.reward += 1
-            # IS = self.data_analyzer.calc_IS()
+            # IS = self.trades_monitor.calc_IS()
             # if (IS['rl'] - IS['benchmark']) * self.trade_direction < 0:
             #     self.reward += -1
             # elif (IS['rl'] - 1.1*IS['benchmark']) * self.trade_direction > 0:
@@ -248,13 +248,13 @@ class BaseEnv(gym.Env, ABC):
         mid = (self.lob_hist_rl[-1].get_best_ask() +
                self.lob_hist_rl[-1].get_best_bid()) / 2
 
-        # update the analyzer
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
-        self.data_analyzer.record_step(algo_id="benchmark", key_name="arrival", value=mid)
+        # update the trades monitor
+        self.trades_monitor.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
+        self.trades_monitor.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
+        self.trades_monitor.record_step(algo_id="benchmark", key_name="arrival", value=mid)
 
 
-        self.data_analyzer.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
-        self.data_analyzer.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
-        self.data_analyzer.record_step(algo_id="rl", key_name="arrival", value=mid)
+        self.trades_monitor.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
+        self.trades_monitor.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
+        self.trades_monitor.record_step(algo_id="rl", key_name="arrival", value=mid)
 

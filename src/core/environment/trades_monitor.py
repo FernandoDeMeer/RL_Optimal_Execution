@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class DataAnalyzer:
+class TradesMonitor:
 
     def __init__(self, algo_ids):
 
