@@ -1,7 +1,7 @@
+import sys
 import argparse
 
 from app import RLOptimalTradeExecutionApp
-
 
 parser = argparse.ArgumentParser()
 
@@ -57,7 +57,7 @@ parser.add_argument('--reward_type',
                     type=str)
 
 parser.add_argument('--visualize',
-                    default=False,
+                    default=True,
                     help="Show PyQT interface",
                     type=bool)
 
@@ -65,7 +65,31 @@ params = vars(parser.parse_args())
 
 
 if __name__ == '__main__':
-    ## global QT GUI init
+    # from PyQt5.QtWidgets import QApplication
+    # from src.gui.graph_user_interface import GraphUserInterface
+
+    # q_app = QApplication(sys.argv)
 
     app = RLOptimalTradeExecutionApp(params)
     app.run()
+
+    # user_interface = GraphUserInterface()
+    # user_interface.show()
+    #
+    # import numpy as np
+    # user_interface.update_data([
+    #     {
+    #         "event": "{}#{}".format(GraphUserInterface.CHART_0, "0"),
+    #         "data": np.random.rand(1, 200).flatten()
+    #     },
+    #     {
+    #         "event": "{}#{}".format(GraphUserInterface.CHART_0, "1"),
+    #         "data": np.random.rand(1, 200).cumsum()
+    #     },
+    #     {
+    #         "event": "{}#{}".format(GraphUserInterface.CHART_1, "0"),
+    #         "data": np.random.rand(1, 200).flatten()
+    #     },
+    # ])
+
+    # sys.exit(q_app.exec_())

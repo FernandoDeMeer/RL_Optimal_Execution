@@ -27,8 +27,9 @@ class RLOptimalTradeExecutionApp:
                                                   )
 
         if params["visualize"]:
-            self.gui = GraphUserInterface()
-            self.environment.register_gui(self.gui)
+            self.user_interface = GraphUserInterface()
+            self.environment.register_ui(self.user_interface)
+            self.user_interface.show()
 
     def _init_data_feed(self, data_feed_type):
 

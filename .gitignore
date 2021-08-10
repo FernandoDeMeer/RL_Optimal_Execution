@@ -1,5 +1,6 @@
 *.DS_Store
-venv_rloptimaltradeexecution/
+venv*
+.idea
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
