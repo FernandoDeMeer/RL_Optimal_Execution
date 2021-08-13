@@ -113,11 +113,11 @@ class BaseEnv(gym.Env, ABC):
                               'trade_id': 1}
         else:
             #Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
-            if action[0]*2*place_order_bmk.quantity < self.qty_remaining:
+            if action[0]*2*float(place_order_bmk['quantity']) < self.qty_remaining:
                 place_order_rl = {'type': 'market',
                                   'timestamp': self.time,
                                   'side': 'bid' if self.trade_direction == 1 else 'ask',
-                                  'quantity': Decimal(str(action[0]*2*place_order_bmk.quantity)),
+                                  'quantity': Decimal(str(action[0]*2*float(place_order_bmk['quantity']))),
                                   'trade_id': 1}
             else:
                 place_order_rl = {'type': 'market',
