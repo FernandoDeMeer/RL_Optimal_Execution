@@ -235,16 +235,16 @@ class BaseEnv(gym.Env, ABC):
         # apply a quadratic penalty if the trading volume exceeds the available volumes of the top 5 bids
         if self.trade_direction == 1:
             # We are buying, so we look at the asks
-            asks = self.lob_hist_rl[-1].asks[-5:]
-            available_volume = np.sum([float(self.lob_hist_rl[-1].asks.get_price_list(p).volume) for p in asks])
+            ask_items = self.lob_hist_rl[-1].asks.order_map.items()
+            available_volume = np.sum([float(asks[1].quantity) for asks in list(ask_items)[:5]])
         else:
             # We are selling, so we look at the bids
-            bids = self.lob_hist_rl[-1].bids[-5:]
-            available_volume = np.sum([float(self.lob_hist_rl[-1].bids.get_price_list(p).volume) for p in bids])
+            bid_items = self.lob_hist_rl[-1].bids.order_map.items()
+            available_volume = np.sum([float(bids[1].quantity) for bids in list(bid_items)[-5:]])
 
         action_volume = action[0]*2*(self.qty_to_trade/self.max_steps)
-        if  available_volume < action_volume:
-            self.reward +=  -np.square(available_volume-action_volume)
+        if available_volume < action_volume:
+            self.reward -= np.square(available_volume-action_volume)
 
     def _record_step(self, bmk, rl):
 
