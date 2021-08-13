@@ -34,4 +34,4 @@ class TradesMonitor:
     def reset(self):
         self.data = {}
         for algo_id in self.algo_ids:
-            self.data[algo_id] = {"pxs": [], "qty": [], "t": []}
+            self.data[algo_id] = {"pxs": [], "qty": [], "t": [], "arrival": []}
