@@ -1,7 +1,3 @@
-import gym
-import numpy as np
-from gym.utils import seeding
-from env.orderbook import OrderBook
 from decimal import Decimal
 from src.core.environment.base_env import BaseEnv
 
@@ -11,6 +7,7 @@ TODO:
     - add the dynamic number of lobs in the state shape.
     - 
 """
+
 
 class HistoricalOrderBookEnv(BaseEnv):
 
