@@ -1,4 +1,3 @@
-import argparse
 import gym
 import numpy as np
 from stable_baselines.common.policies import MlpPolicy
@@ -28,14 +27,14 @@ if __name__ == '__main__':
     # define action space
     action_space = gym.spaces.Box(low=0.0,
                                   high=2 * volume/trade_steps,
-                                  shape= (1,),
+                                  shape=(1,),
                                   dtype=np.float32)
 
     # construct the environment
     lob_env = BaseEnv(data_feed=lob_feed,
                       trade_direction=1,
-                      qty_to_trade=3,
-                      max_step_range=50,
+                      qty_to_trade=0.3,
+                      max_step_range=5,
                       benchmark_algo=benchmark,
                       obs_config=observation_space_config,
                       action_space=action_space)
@@ -49,8 +48,8 @@ if __name__ == '__main__':
             break
 
     # Train a PPO2 agent on this...
-    model = PPO2(MlpPolicy, lob_env, verbose=1)
-    model.learn(total_timesteps=300)
+    model = PPO2(MlpPolicy, lob_env, verbose=1, tensorboard_log="./log/")
+    model.learn(total_timesteps=30000, tb_log_name="first_trial")
 
     # let the trained model step through the environment...
     obs = lob_env.reset()
