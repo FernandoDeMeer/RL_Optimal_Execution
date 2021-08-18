@@ -209,11 +209,14 @@ class BaseEnv(gym.Env, ABC):
                                                    norm_price=mid,
                                                    norm_vol_bid=vol_bid,
                                                    norm_vol_ask=vol_ask)), axis=0)
+            obs = np.concatenate((obs,
+                                  np.array([self.qty_remaining/self.qty_to_trade]),
+                                  np.array([self.remaining_steps/self.max_steps])), axis=0)
         else:
             for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
                 obs = np.concatenate(obs, (lob_to_numpy(lob,
                                                         depth=self.obs_config['lob_depth'])), axis=0)
-        obs = np.concatenate((obs, np.array([self.qty_remaining]), np.array([self.remaining_steps])), axis=0)
+            obs = np.concatenate((obs, np.array([self.qty_remaining]), np.array([self.remaining_steps])), axis=0)
 
         # need to make sure that obs fits to the observation space...
         # 0 padding whenever this gets smaller...
