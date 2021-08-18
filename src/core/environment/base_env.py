@@ -104,6 +104,7 @@ class BaseEnv(gym.Env, ABC):
         self.remaining_steps -= 1
         place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
 
+        """
         if self.time >= self.max_steps-1:
             # We are at the end of the episode so we have to trade all our remaining inventory
             place_order_rl = {'type': 'market',
@@ -112,19 +113,23 @@ class BaseEnv(gym.Env, ABC):
                               'quantity': Decimal(str(self.qty_remaining)),
                               'trade_id': 1}
         else:
-            #Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
-            if action[0]*2*float(place_order_bmk['quantity']) < self.qty_remaining:
-                place_order_rl = {'type': 'market',
-                                  'timestamp': self.time,
-                                  'side': 'bid' if self.trade_direction == 1 else 'ask',
-                                  'quantity': Decimal(str(action[0]*2*float(place_order_bmk['quantity']))),
-                                  'trade_id': 1}
-            else:
-                place_order_rl = {'type': 'market',
-                                  'timestamp': self.time,
-                                  'side': 'bid' if self.trade_direction == 1 else 'ask',
-                                  'quantity': Decimal(str(self.qty_remaining)),
-                                  'trade_id': 1}
+        """
+        # Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
+        if action[0]*2*float(place_order_bmk['quantity']) < self.qty_remaining:
+            place_order_rl = {'type': 'market',
+                              'timestamp': self.time,
+                              'side': 'bid' if self.trade_direction == 1 else 'ask',
+                              'quantity': Decimal(str(action[0]*2*float(place_order_bmk['quantity']))),
+                              'trade_id': 1}
+        else:
+            place_order_rl = {'type': 'market',
+                              'timestamp': self.time,
+                              'side': 'bid' if self.trade_direction == 1 else 'ask',
+                              'quantity': Decimal(str(self.qty_remaining)),
+                              'trade_id': 1}
+
+        self.last_bmk_order = place_order_bmk
+        self.last_rl_order = place_order_rl
 
         # place order in LOB and replace LOB history with current trade
         # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
@@ -134,7 +139,6 @@ class BaseEnv(gym.Env, ABC):
         # Update the trades monitor
         self._record_step(bmk_trade_dict, rl_trade_dict)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
-
 
         # incorporate sparse reward for now...
         self.calc_reward(action)
@@ -226,6 +230,8 @@ class BaseEnv(gym.Env, ABC):
             vwaps = self.trades_monitor.calc_vwaps()
             if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
                 self.reward += 1
+            if self.qty_remaining > 0:
+                self.reward -= 2
             # IS = self.trades_monitor.calc_IS()
             # if (IS['rl'] - IS['benchmark']) * self.trade_direction < 0:
             #     self.reward += -1
@@ -242,7 +248,7 @@ class BaseEnv(gym.Env, ABC):
             bid_items = self.lob_hist_rl[-1].bids.order_map.items()
             available_volume = np.sum([float(bids[1].quantity) for bids in list(bid_items)[-5:]])
 
-        action_volume = action[0]*2*(self.qty_to_trade/self.max_steps)
+        action_volume = action[0]*2*float(self.last_bmk_order['quantity'])
         if available_volume < action_volume:
             self.reward -= np.square(available_volume-action_volume)
 
@@ -251,17 +257,11 @@ class BaseEnv(gym.Env, ABC):
         # update the volume of the benchmark algo
         self.benchmark_algo.update_remaining_volume(bmk['qty']) # this is odd to do here...
 
-        #Calculate Arrival Price
-        mid = (self.lob_hist_rl[-1].get_best_ask() +
-               self.lob_hist_rl[-1].get_best_bid()) / 2
-
         # update the trades monitor
         self.trades_monitor.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
         self.trades_monitor.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
-        self.trades_monitor.record_step(algo_id="benchmark", key_name="arrival", value=mid)
-
+        self.trades_monitor.record_step(algo_id="benchmark", key_name="arrival", value=bmk['mid'])
 
         self.trades_monitor.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
         self.trades_monitor.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
-        self.trades_monitor.record_step(algo_id="rl", key_name="arrival", value=mid)
-
+        self.trades_monitor.record_step(algo_id="rl", key_name="arrival", value=rl['mid'])
