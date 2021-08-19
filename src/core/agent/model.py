@@ -9,11 +9,9 @@ class EndtoEndModel(TFModelV2):
     based on Proximal Policy Optimization", adapted to RLlib's Custom model format
     for policy gradient algorithms.
     """
-
-
     def __init__(self, obs_space, action_space, num_outputs, model_config,
                      name):
-            super(CustomModel, self).__init__(obs_space, action_space, num_outputs,
+            super(EndtoEndModel, self).__init__(obs_space, action_space, num_outputs,
                                               model_config, name)
             self.input = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
             self.prev_r = tf.keras.layers.Input(shape=1, name="previous reward")
