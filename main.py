@@ -1,7 +1,9 @@
 import sys
+import os
 import argparse
-
 from app import RLOptimalTradeExecutionApp
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 parser = argparse.ArgumentParser()
 

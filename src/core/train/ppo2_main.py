@@ -1,7 +1,9 @@
 import gym
+import os
 import numpy as np
 import tensorflow as tf
 from stable_baselines import PPO2
+from main import ROOT_DIR
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
 from src.data.historical_data_feed import HistFeedRL
@@ -128,8 +130,8 @@ class LstmPolicy_Trading(RecurrentActorCriticPolicy):
 
 if __name__ == '__main__':
 
-    # construct a data feed (to be replaced by Florins implementation)
-    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution\\data_dir'
+    # construct a data feed
+    dir = os.path.join(ROOT_DIR, 'data_dir')
     lob_feed = HistFeedRL(data_dir=dir,
                           instrument='btc_usdt',
                           lob_depth=20,
