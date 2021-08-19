@@ -15,23 +15,6 @@ from stable_baselines.common.tf_layers import linear, lstm
 
 
 class CustomEnv_Trading(BaseEnv):
-    def __init__(self,
-                 data_feed,
-                 trade_direction,
-                 qty_to_trade,
-                 max_step_range,
-                 benchmark_algo,
-                 obs_config,
-                 action_space,
-                 ):
-        super(CustomEnv_Trading, self).__init__(data_feed=data_feed,
-                                                trade_direction=trade_direction,
-                                                qty_to_trade=qty_to_trade,
-                                                max_step_range=max_step_range,
-                                                benchmark_algo=benchmark_algo,
-                                                obs_config=obs_config,
-                                                action_space=action_space,
-                                                )
 
     def calc_reward(self,action):
         if self.time >= self.max_steps-1:
