@@ -14,8 +14,10 @@ class EndtoEndModel(TFModelV2):
             super(EndtoEndModel, self).__init__(obs_space, action_space, num_outputs,
                                               model_config, name)
             self.input = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
-            self.prev_r = tf.keras.layers.Input(shape=1, name="previous reward")
-            self.prev_a = tf.keras.layers.Input(shape=1, name="previous action")
+            self.prev_r = tf.keras.layers.Input(shape=1,)
+            self.prev_a = tf.keras.layers.Input(shape=1,)
+            # self.prev_r = tf.keras.layers.Input(shape=1, name="previous reward")
+            # self.prev_a = tf.keras.layers.Input(shape=1, name="previous action")
             dense1 = tf.keras.layers.Dense(128, activation=tf.nn.relu)(self.input)
             dense2 = tf.keras.layers.Dense(128, activation=tf.nn.relu)(dense1)
             concat = tf.keras.layers.Concatenate(axis=0)([dense2, self.prev_r, self.prev_a])
