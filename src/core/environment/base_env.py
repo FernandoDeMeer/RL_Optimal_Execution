@@ -75,7 +75,11 @@ class BaseEnv(gym.Env, ABC):
         # reset the remaining quantitiy to trade and the time counter
         self.time = 0
         self.qty_remaining = self.qty_to_trade
-        self.qty_remaining_history = [self.qty_remaining]
+        self.rl_qty_remaining_history = [self.qty_to_trade]
+        self.benchmark_qty_remaining_history = [self.qty_to_trade]
+
+        self.mid_price_history = []
+
         if isinstance(self.max_step_range, range):
             self.max_steps = random.sample(self.max_step_range, 1)[0]
         else:
@@ -141,10 +145,14 @@ class BaseEnv(gym.Env, ABC):
         bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
         rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
 
+        self.mid_price_history.append(float(bmk_trade_dict["mid"]))
+
         # Update the trades monitor
         self._record_step(bmk_trade_dict, rl_trade_dict)
+        self.benchmark_qty_remaining_history.append(self.benchmark_qty_remaining_history[-1] - bmk_trade_dict['qty'])
+
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
-        self.qty_remaining_history.append(self.qty_remaining)
+        self.rl_qty_remaining_history.append(self.qty_remaining)
 
         # incorporate sparse reward for now...
         self.calc_reward(action)
@@ -161,18 +169,28 @@ class BaseEnv(gym.Env, ABC):
             self.user_interface.update_data([
                 {
                     "event": "{}#{}".format(UserInterface.CHART_0, "0"),
-                    "data": np.array(self.qty_remaining_history)
+                    "data": np.array(self.benchmark_qty_remaining_history)
                 },
-                # {
-                #     "event": "{}#{}".format(UserInterface.CHART_0, "1"),
-                #     "data": np.random.rand(1, 200).cumsum()
-                # },
+                {
+                    "event": "{}#{}".format(UserInterface.CHART_0, "1"),
+                    "data": np.array(self.rl_qty_remaining_history)
+                },
                 {
                     "event": "{}#{}".format(UserInterface.CHART_1, "0"),
-                    "data": np.random.rand(1, 200).flatten()
+                    "data": np.array(self.trades_monitor.data["benchmark"]["qty"])
+                },
+                {
+                    "event": "{}#{}".format(UserInterface.CHART_1, "1"),
+                    "data": np.array(self.trades_monitor.data["rl"]["qty"])
+                },
+                {
+                    "event": "{}#{}".format(UserInterface.CHART_2, "0"),
+                    "data": np.array(self.mid_price_history)
                 },
             ])
         if self.done:
+            # pause the worker thread, such that the GUI thread is fully updated at the end of the episode and \
+            #   we also get a chance to see the visualisation
             time__.sleep(1)
 
         self.info = {}

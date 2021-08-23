@@ -17,7 +17,9 @@ class UserInterface(QMainWindow):
     signal_in = pyqtSignal(object)
 
     CHART_0 = "Quantity Remaining"
-    CHART_1 = "CHART_1"
+    CHART_1 = "Step Quantity"
+    CHART_2 = "Mid Price"
+    CHART_3 = "N/A"
 
     def __init__(self):
         super().__init__()
@@ -62,16 +64,20 @@ class UserInterface(QMainWindow):
             pen=pg.mkPen(width=2, color=(50, 255, 50)))
         self.main_layout.addWidget(chart_0, 0, 0, 1, 1)
 
-        chart_1 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
+        chart_1 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format(UserInterface.CHART_1))
+        chart_1.setMouseEnabled(x=False, y=False)
+
         self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_1.plot(pen=pg.mkPen(width=2))
+        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(1))] = chart_1.plot(
+            pen=pg.mkPen(width=2, color=(50, 255, 50)))
         self.main_layout.addWidget(chart_1, 1, 0, 1, 1)
 
-        chart_2 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
-        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_2.plot(pen=pg.mkPen(width=2))
+        chart_2 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format(UserInterface.CHART_2))
+        self.charts["{}#{}".format(UserInterface.CHART_2, "{}".format(0))] = chart_2.plot(pen=pg.mkPen(width=2))
         self.main_layout.addWidget(chart_2, 0, 1, 1, 1)
 
-        chart_3 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
-        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_3.plot(pen=pg.mkPen(width=2))
+        chart_3 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format(UserInterface.CHART_3))
+        self.charts["{}#{}".format(UserInterface.CHART_3, "{}".format(0))] = chart_3.plot(pen=pg.mkPen(width=2))
         self.main_layout.addWidget(chart_3, 1, 1, 1, 1)
 
     def update_data(self, event):
