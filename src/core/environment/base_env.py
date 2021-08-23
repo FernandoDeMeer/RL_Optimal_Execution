@@ -6,6 +6,8 @@ from decimal import Decimal
 from abc import ABC, abstractmethod
 from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.broker import Broker
+from src.ui.user_interface import UserInterface
+import time as time__
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -33,6 +35,7 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
 class BaseEnv(gym.Env, ABC):
 
     def __init__(self,
+                 user_interface,
                  data_feed,
                  trade_direction,
                  qty_to_trade,
@@ -42,6 +45,7 @@ class BaseEnv(gym.Env, ABC):
                  action_space,
                  ):
 
+        self.user_interface = user_interface
         # object returning snapshots of limit order books
         self.data_feed = data_feed
 
@@ -71,6 +75,7 @@ class BaseEnv(gym.Env, ABC):
         # reset the remaining quantitiy to trade and the time counter
         self.time = 0
         self.qty_remaining = self.qty_to_trade
+        self.qty_remaining_history = [self.qty_remaining]
         if isinstance(self.max_step_range, range):
             self.max_steps = random.sample(self.max_step_range, 1)[0]
         else:
@@ -139,6 +144,7 @@ class BaseEnv(gym.Env, ABC):
         # Update the trades monitor
         self._record_step(bmk_trade_dict, rl_trade_dict)
         self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
+        self.qty_remaining_history.append(self.qty_remaining)
 
         # incorporate sparse reward for now...
         self.calc_reward(action)
@@ -150,6 +156,24 @@ class BaseEnv(gym.Env, ABC):
             self.lob_hist_bmk.append(lob_next)
             self.lob_hist_rl.append(lob_next)
             self.state = self.build_observation()
+
+        if self.time % 2 == 0:
+            self.user_interface.update_data([
+                {
+                    "event": "{}#{}".format(UserInterface.CHART_0, "0"),
+                    "data": np.array(self.qty_remaining_history)
+                },
+                # {
+                #     "event": "{}#{}".format(UserInterface.CHART_0, "1"),
+                #     "data": np.random.rand(1, 200).cumsum()
+                # },
+                {
+                    "event": "{}#{}".format(UserInterface.CHART_1, "0"),
+                    "data": np.random.rand(1, 200).flatten()
+                },
+            ])
+        if self.done:
+            time__.sleep(1)
 
         self.info = {}
         return self.state, self.reward, self.done, self.info

@@ -12,11 +12,11 @@ from PyQt5.QtCore import pyqtSignal, QTime
 import pyqtgraph as pg
 
 
-class GraphUserInterface(QMainWindow):
+class UserInterface(QMainWindow):
 
     signal_in = pyqtSignal(object)
 
-    CHART_0 = "CHART_0"
+    CHART_0 = "Quantity Remaining"
     CHART_1 = "CHART_1"
 
     def __init__(self):
@@ -54,24 +54,24 @@ class GraphUserInterface(QMainWindow):
         target.setPalette(palette)
 
     def _add_components(self):
-        chart_0 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph A"))
+        chart_0 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format(UserInterface.CHART_0))
         chart_0.setMouseEnabled(x=False, y=False)
 
-        self.charts["{}#{}".format(GraphUserInterface.CHART_0, "{}".format(0))] = chart_0.plot(pen=pg.mkPen(width=2))
-        self.charts["{}#{}".format(GraphUserInterface.CHART_0, "{}".format(1))] = chart_0.plot(
+        self.charts["{}#{}".format(UserInterface.CHART_0, "{}".format(0))] = chart_0.plot(pen=pg.mkPen(width=2))
+        self.charts["{}#{}".format(UserInterface.CHART_0, "{}".format(1))] = chart_0.plot(
             pen=pg.mkPen(width=2, color=(50, 255, 50)))
         self.main_layout.addWidget(chart_0, 0, 0, 1, 1)
 
         chart_1 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
-        self.charts["{}#{}".format(GraphUserInterface.CHART_1, "{}".format(0))] = chart_1.plot(pen=pg.mkPen(width=2))
+        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_1.plot(pen=pg.mkPen(width=2))
         self.main_layout.addWidget(chart_1, 1, 0, 1, 1)
 
         chart_2 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
-        self.charts["{}#{}".format(GraphUserInterface.CHART_1, "{}".format(0))] = chart_2.plot(pen=pg.mkPen(width=2))
+        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_2.plot(pen=pg.mkPen(width=2))
         self.main_layout.addWidget(chart_2, 0, 1, 1, 1)
 
         chart_3 = pg.PlotWidget(title='<h4 style="font: bold;">{}</h4>'.format("Graph B"))
-        self.charts["{}#{}".format(GraphUserInterface.CHART_1, "{}".format(0))] = chart_3.plot(pen=pg.mkPen(width=2))
+        self.charts["{}#{}".format(UserInterface.CHART_1, "{}".format(0))] = chart_3.plot(pen=pg.mkPen(width=2))
         self.main_layout.addWidget(chart_3, 1, 1, 1, 1)
 
     def update_data(self, event):
