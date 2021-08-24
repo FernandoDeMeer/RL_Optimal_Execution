@@ -7,7 +7,6 @@ from ray import tune
 
 import gym
 import numpy as np
-from main import ROOT_DIR
 
 from src.data.historical_data_feed import HistFeedRL
 from src.core.environment.execution_algo import TWAPAlgo
@@ -16,6 +15,9 @@ from src.core.agent.policy import get_policy_config
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents import ppo
 from ray.rllib.agents.ppo import PPOTrainer
+
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def lob_env_creator(env_config):
@@ -62,7 +64,8 @@ def lob_env_creator(env_config):
     return lob_env # return an env instance
 
 if __name__ == "__main__":
-    #dirst Declare where to store checkpoints and tensorboard result files
+
+    # first Declare where to store checkpoints and tensorboard result files
 
     chkpt_root = "../../tmp/chkpt"
     shutil.rmtree(chkpt_root,ignore_errors=True,onerror=None)
