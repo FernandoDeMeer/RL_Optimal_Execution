@@ -11,7 +11,7 @@ source venv/bin/activate
 
 pip install -r requirements.txt
 
-
+<br/><br/>
 
 In order to use the visualisation, set SHOW_UI=True in ppo_sbaseline.py file. After the agent was trained/loaded, it will go in "inference" mode. To control the stepping through the environment, bring the app UserInterface into focus and use the following keys on your keyboard:
 
