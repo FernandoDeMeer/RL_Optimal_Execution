@@ -4,8 +4,11 @@
 Installation steps:
 
 git clone https://github.zhaw.ch/dasc/RLOptimalTradeExecution.git
+
 cd RLOptimalTradeExecution
+
 source venv/bin/activate
+
 pip install -r requirements.txt
 
 
