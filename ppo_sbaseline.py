@@ -12,12 +12,56 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines.common.schedules import LinearSchedule
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 from stable_baselines.common.tf_layers import linear, lstm
-from PyQt5.QtWidgets import QApplication
-from src.ui.user_interface import UserInterface
+
 import sys
 import threading
+import time
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SHOW_UI = True
+
+
+class EnvController:
+
+    def __init__(self):
+
+        self.wait_step = False
+        self.wait_episode = False
+
+        self.allow_next_step = False
+        self.exit_end_of_episode = False
+
+    def check_wait_on_event(self, wait_mode):
+
+        while True:
+
+            if wait_mode == "wait_step":
+                if not self.wait_step or self.allow_next_step:
+                    self.allow_next_step = False
+                    break
+            elif wait_mode == "wait_episode":
+                if not self.wait_episode:
+                    break
+
+            time.sleep(0.1)
+
+    def on_controller_event(self, message):
+
+        msg_event = message["event"]
+        msg_data = message["data"]
+
+        if msg_event == "wait_step":
+            self.wait_step = msg_data
+
+        elif msg_event == "next_step":
+            self.allow_next_step = True
+
+        elif msg_event == "wait_episode":
+            self.wait_episode = msg_data
+
+        elif msg_event == "exit_end_of_episode":
+            self.exit_end_of_episode = True
 
 
 class CustomEnv_Trading(BaseEnv):
@@ -127,7 +171,13 @@ class RLOptimalTradeExecutionApp(threading.Thread):
     def __init__(self):
         super().__init__()
 
-        self.user_interface = UserInterface()
+        self.env_controller = EnvController()
+
+        if SHOW_UI:
+            self.user_interface = UserInterface(subscriber=self.env_controller)
+            self.user_interface.show()
+        else:
+            self.user_interface = None
 
         # construct a data feed
         dir = os.path.join(ROOT_DIR, 'data_dir')
@@ -179,20 +229,32 @@ class RLOptimalTradeExecutionApp(threading.Thread):
         self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
         self.model.save("LSTM_E2E_Paper_model")
 
-        # let the trained model step through the environment...
-        obs = self.env.reset()
-        dones = False
-        while dones is False:
-            action, _states = self.model.predict(obs)
-            obs, rewards, dones, info = self.env.step(action)
+        while not self.env_controller.exit_end_of_episode:
+
+            # let the trained model step through the environment...
+            obs = self.env.reset()
+            done = [False]
+            while not done[0]:
+                action, _states = self.model.predict(obs)
+                obs, rewards, done, info = self.env.step(action)
+
+                if SHOW_UI:
+                    self.env.render()
+                    time.sleep(0.1)
+
+                self.env_controller.check_wait_on_event("wait_step")
+            self.env_controller.check_wait_on_event("wait_episode")
 
 
 if __name__ == '__main__':
 
-    ui_app = QApplication(sys.argv)
+    if SHOW_UI:
+        from PyQt5.QtWidgets import QApplication
+        from src.ui.user_interface import UserInterface
+        qapp = QApplication(sys.argv)
 
     rl_app = RLOptimalTradeExecutionApp()
-    rl_app.user_interface.show()
     rl_app.start()
 
-    sys.exit(ui_app.exec_())
+    if SHOW_UI:
+        sys.exit(qapp.exec_())

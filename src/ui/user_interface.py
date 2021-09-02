@@ -10,27 +10,35 @@ from PyQt5.QtGui import QPalette, QColor
 from pyqtgraph.graphicsItems.ViewBox import ViewBox
 from PyQt5.QtCore import pyqtSignal, QTime
 import pyqtgraph as pg
+import PyQt5.QtCore as QtCore
 
 
 class UserInterface(QMainWindow):
 
     signal_in = pyqtSignal(object)
+    signal_out = pyqtSignal(object)
 
     CHART_0 = "Quantity Remaining"
     CHART_1 = "Step Quantity"
     CHART_2 = "Mid Price"
     CHART_3 = "N/A"
 
-    def __init__(self):
+    def __init__(self, subscriber):
         super().__init__()
+
+        self.subscriber = subscriber
 
         self.main_layout = None
         self.charts = {}
 
         self.signal_in.connect(self._on_data)
+        self.signal_out.connect(self.data_out)
 
         self._init_ui()
         self._add_components()
+
+        self.wait_step = False
+        self.wait_episode = False
 
     def _init_ui(self):
 
@@ -91,3 +99,32 @@ class UserInterface(QMainWindow):
 
             chart = self.charts[event_type]
             chart.setData(data_series)
+
+    def keyPressEvent(self, event):
+
+        if event.key() == QtCore.Qt.Key_S:
+            self.wait_step = not self.wait_step
+
+            self.signal_out.emit({
+                "event": "wait_step",
+                "data": self.wait_step
+            })
+
+        elif event.key() == QtCore.Qt.Key_E:
+            self.wait_episode = not self.wait_episode
+
+            self.signal_out.emit({
+                "event": "wait_episode",
+                "data": self.wait_episode
+            })
+
+        elif event.key() == QtCore.Qt.Key_N:
+            self.wait_episode = not self.wait_episode
+
+            self.signal_out.emit({
+                "event": "next_step",
+                "data": None
+            })
+
+    def data_out(self, message):
+        self.subscriber.on_controller_event(message)

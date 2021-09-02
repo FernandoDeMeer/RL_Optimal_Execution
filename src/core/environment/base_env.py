@@ -8,6 +8,7 @@ from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.broker import Broker
 from src.ui.user_interface import UserInterface
 import time as time__
+import copy
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -106,6 +107,8 @@ class BaseEnv(gym.Env, ABC):
 
     def step(self, action):
 
+        print("action: {} on time idx: {}".format(action, self.time))
+
         assert self.done is False, (
             'reset() must be called before step()')
 
@@ -165,36 +168,33 @@ class BaseEnv(gym.Env, ABC):
             self.lob_hist_rl.append(lob_next)
             self.state = self.build_observation()
 
-        if self.time % 2 == 0:
-            self.user_interface.update_data([
-                {
-                    "event": "{}#{}".format(UserInterface.CHART_0, "0"),
-                    "data": np.array(self.benchmark_qty_remaining_history)
-                },
-                {
-                    "event": "{}#{}".format(UserInterface.CHART_0, "1"),
-                    "data": np.array(self.rl_qty_remaining_history)
-                },
-                {
-                    "event": "{}#{}".format(UserInterface.CHART_1, "0"),
-                    "data": np.array(self.trades_monitor.data["benchmark"]["qty"])
-                },
-                {
-                    "event": "{}#{}".format(UserInterface.CHART_1, "1"),
-                    "data": np.array(self.trades_monitor.data["rl"]["qty"])
-                },
-                {
-                    "event": "{}#{}".format(UserInterface.CHART_2, "0"),
-                    "data": np.array(self.mid_price_history)
-                },
-            ])
-        if self.done:
-            # pause the worker thread, such that the GUI thread is fully updated at the end of the episode and \
-            #   we also get a chance to see the visualisation
-            time__.sleep(1)
-
         self.info = {}
         return self.state, self.reward, self.done, self.info
+
+    def render(self, mode):
+
+        self.user_interface.update_data([
+            {
+                "event": "{}#{}".format(UserInterface.CHART_0, "0"),
+                "data": np.array(copy.deepcopy(self.benchmark_qty_remaining_history))
+            },
+            {
+                "event": "{}#{}".format(UserInterface.CHART_0, "1"),
+                "data": np.array(copy.deepcopy(self.rl_qty_remaining_history))
+            },
+            {
+                "event": "{}#{}".format(UserInterface.CHART_1, "0"),
+                "data": np.array(copy.deepcopy(self.trades_monitor.data["benchmark"]["qty"]))
+            },
+            {
+                "event": "{}#{}".format(UserInterface.CHART_1, "1"),
+                "data": np.array(copy.deepcopy(self.trades_monitor.data["rl"]["qty"]))
+            },
+            {
+                "event": "{}#{}".format(UserInterface.CHART_2, "0"),
+                "data": np.array(copy.deepcopy(self.mid_price_history))
+            },
+        ])
 
     def build_observation_space(self):
 
