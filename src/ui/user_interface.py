@@ -11,6 +11,66 @@ from pyqtgraph.graphicsItems.ViewBox import ViewBox
 from PyQt5.QtCore import pyqtSignal, QTime
 import pyqtgraph as pg
 import PyQt5.QtCore as QtCore
+import time
+
+# self.user_interface = UserInterface(subscriber=self.env_controller)
+# self.user_interface.show()
+from PyQt5.QtWidgets import QApplication
+import sys
+
+
+class UIAppWindow:
+
+    def __init__(self):
+        self.qapp = QApplication(sys.argv)
+
+        self.controller = EnvController()
+        self.user_interface = UserInterface(subscriber=self.controller)
+
+    def exec_qapp(self):
+        sys.exit(self.qapp.exec_())
+
+
+class EnvController:
+
+    def __init__(self):
+
+        self.wait_step = False
+        self.wait_episode = False
+
+        self.allow_next_step = False
+        self.exit_end_of_episode = False
+
+    def check_wait_on_event(self, wait_mode):
+
+        while True:
+
+            if wait_mode == "wait_step":
+                if not self.wait_step or self.allow_next_step:
+                    self.allow_next_step = False
+                    break
+            elif wait_mode == "wait_episode":
+                if not self.wait_episode:
+                    break
+
+            time.sleep(0.1)
+
+    def on_controller_event(self, message):
+
+        msg_event = message["event"]
+        msg_data = message["data"]
+
+        if msg_event == "wait_step":
+            self.wait_step = msg_data
+
+        elif msg_event == "next_step":
+            self.allow_next_step = True
+
+        elif msg_event == "wait_episode":
+            self.wait_episode = msg_data
+
+        elif msg_event == "exit_end_of_episode":
+            self.exit_end_of_episode = True
 
 
 class UserInterface(QMainWindow):
@@ -26,6 +86,7 @@ class UserInterface(QMainWindow):
     def __init__(self, subscriber):
         super().__init__()
 
+        self.env_controller = EnvController()
         self.subscriber = subscriber
 
         self.main_layout = None

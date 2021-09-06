@@ -6,8 +6,8 @@ from decimal import Decimal
 from abc import ABC, abstractmethod
 from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.broker import Broker
-from src.ui.user_interface import UserInterface
-import time as time__
+from src.ui.user_interface import UIAppWindow, UserInterface, EnvController
+import time
 import copy
 
 
@@ -36,7 +36,7 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
 class BaseEnv(gym.Env, ABC):
 
     def __init__(self,
-                 user_interface,
+                 show_ui,
                  data_feed,
                  trade_direction,
                  qty_to_trade,
@@ -46,7 +46,11 @@ class BaseEnv(gym.Env, ABC):
                  action_space,
                  ):
 
-        self.user_interface = user_interface
+        if show_ui:
+            self.ui = UIAppWindow()
+        else:
+            self.ui = None
+
         # object returning snapshots of limit order books
         self.data_feed = data_feed
 
@@ -107,7 +111,7 @@ class BaseEnv(gym.Env, ABC):
 
     def step(self, action):
 
-        print("action: {} on time idx: {}".format(action, self.time))
+        print("time idx: {}\t action: {}".format(self.time, action))
 
         assert self.done is False, (
             'reset() must be called before step()')
@@ -173,7 +177,10 @@ class BaseEnv(gym.Env, ABC):
 
     def render(self, mode):
 
-        self.user_interface.update_data([
+        if self.ui is None:
+            return
+
+        self.ui.user_interface.update_data([
             {
                 "event": "{}#{}".format(UserInterface.CHART_0, "0"),
                 "data": np.array(copy.deepcopy(self.benchmark_qty_remaining_history))
@@ -195,6 +202,9 @@ class BaseEnv(gym.Env, ABC):
                 "data": np.array(copy.deepcopy(self.mid_price_history))
             },
         ])
+
+        time.sleep(0.1)
+        self.ui.controller.check_wait_on_event("wait_step")
 
     def build_observation_space(self):
 
