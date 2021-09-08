@@ -7,6 +7,8 @@ ENV DEBIAN_FRONTEND="noninteractive" TZ="Europe/London"
 RUN apt update && apt install -y -q tree
 RUN apt install -y -q python3-opencv
 
+ENV NVIDIA_VISIBLE_DEVICES 1
+
 #RUN mkdir rl_optimal_trade_execution
 WORKDIR /tf/rl_optimal_trade_execution
 
