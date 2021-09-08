@@ -111,7 +111,7 @@ class BaseEnv(gym.Env, ABC):
 
     def step(self, action):
 
-        print("time idx: {}\t action: {}".format(self.time, action))
+        # print("time idx: {}\t action: {}".format(self.time, action))
 
         assert self.done is False, (
             'reset() must be called before step()')
@@ -177,9 +177,6 @@ class BaseEnv(gym.Env, ABC):
 
     def render(self, mode):
 
-        if self.ui is None:
-            return
-
         self.ui.user_interface.update_data([
             {
                 "event": "{}#{}".format(UserInterface.CHART_0, "0"),
@@ -205,6 +202,10 @@ class BaseEnv(gym.Env, ABC):
 
         time.sleep(0.1)
         self.ui.controller.check_wait_on_event("wait_step")
+
+        if self.done:
+            print("done")
+            self.ui.controller.check_wait_on_event("wait_episode")
 
     def build_observation_space(self):
 

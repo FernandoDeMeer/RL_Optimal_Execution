@@ -1,9 +1,9 @@
+import argparse
 import gym
 import os
 import numpy as np
 import tensorflow as tf
 from stable_baselines import PPO2
-# from main import ROOT_DIR
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
 from src.data.historical_data_feed import HistFeedRL
@@ -12,12 +12,9 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines.common.schedules import LinearSchedule
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 from stable_baselines.common.tf_layers import linear, lstm
-
 import threading
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-SHOW_UI = True
 
 
 class CustomEnv_Trading(BaseEnv):
@@ -124,8 +121,10 @@ class LstmPolicy_Trading(RecurrentActorCriticPolicy):
 
 class RLOptimalTradeExecutionApp(threading.Thread):
 
-    def __init__(self):
+    def __init__(self, args):
         super().__init__()
+
+        self.show_ui = args.show_ui
 
         # construct a data feed
         dir = os.path.join(ROOT_DIR, 'data_dir')
@@ -150,7 +149,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
                                       dtype=np.float32)
 
         # construct the environment
-        lob_env = CustomEnv_Trading(SHOW_UI,
+        lob_env = CustomEnv_Trading(show_ui=self.show_ui,
                                     data_feed=self.lob_feed,
                                     trade_direction=trade_direction,
                                     qty_to_trade=volume,
@@ -174,7 +173,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 
     def run(self):
 
-        # self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
+        self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
         self.model.save("LSTM_E2E_Paper_model")
 
         while True:
@@ -186,16 +185,19 @@ class RLOptimalTradeExecutionApp(threading.Thread):
                 action, _states = self.model.predict(obs)
                 obs, rewards, done, info = self.env.step(action)
 
-                self.env.render()
-
-            if SHOW_UI:
-                self.env.envs[0].ui.controller.check_wait_on_event("wait_episode")
+                if self.show_ui:
+                    self.env.render()
 
 
 if __name__ == '__main__':
 
-    rl_app = RLOptimalTradeExecutionApp()
+    parser = argparse.ArgumentParser(description='RLOptimalTradeExecution')
+
+    parser.add_argument('--show_ui', action='store_true')
+    args = parser.parse_args()
+
+    rl_app = RLOptimalTradeExecutionApp(args)
     rl_app.start()
 
-    if SHOW_UI:
+    if args.show_ui:
         rl_app.env.envs[0].ui.exec_qapp()

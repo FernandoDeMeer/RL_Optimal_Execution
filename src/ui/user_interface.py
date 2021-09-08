@@ -1,20 +1,18 @@
-from PyQt5.QtGui import QColor, QBrush
-from PyQt5.QtGui import QPainter, QFont
+# from PyQt5.QtGui import QColor, QBrush
+# from PyQt5.QtGui import QPainter, QFont
 from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QVBoxLayout, QTableWidget, QHeaderView, QHBoxLayout, QPushButton, QTableWidgetItem, QAbstractItemView, QSlider, QLineEdit
-from PyQt5 import QtWidgets
-import PyQt5.QtCore
+# from PyQt5 import QtWidgets
+# import PyQt5.QtCore
 # from PyQt5.QtChart import QChart, QChartView, QBarSet, QPercentBarSeries, QBarCategoryAxis
 from PyQt5.QtWidgets import *
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtGui import QPalette, QColor
-from pyqtgraph.graphicsItems.ViewBox import ViewBox
+# from pyqtgraph.graphicsItems.ViewBox import ViewBox
 from PyQt5.QtCore import pyqtSignal, QTime
 import pyqtgraph as pg
 import PyQt5.QtCore as QtCore
 import time
 
-# self.user_interface = UserInterface(subscriber=self.env_controller)
-# self.user_interface.show()
 from PyQt5.QtWidgets import QApplication
 import sys
 
@@ -180,7 +178,6 @@ class UserInterface(QMainWindow):
             })
 
         elif event.key() == QtCore.Qt.Key_N:
-            self.wait_episode = not self.wait_episode
 
             self.signal_out.emit({
                 "event": "next_step",
