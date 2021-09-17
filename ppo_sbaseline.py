@@ -8,16 +8,16 @@ from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
 from src.data.historical_data_feed import HistFeedRL
 from stable_baselines.common.policies import LstmPolicy, RecurrentActorCriticPolicy
-from stable_baselines.common.vec_env import DummyVecEnv
-from stable_baselines.common.schedules import LinearSchedule
+from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 from stable_baselines.common.tf_layers import linear, lstm
+from stable_baselines.common import set_global_seeds
 import threading
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-class CustomEnv_Trading(BaseEnv):
+class CustomEnvTrading(BaseEnv):
 
     def __init__(self, show_ui, data_feed, trade_direction, qty_to_trade, max_step_range, benchmark_algo,
                  obs_config, action_space):
@@ -57,7 +57,7 @@ class CustomLSTMPolicy(LstmPolicy):
                          layer_norm=True, feature_extraction="mlp", **_kwargs)
 
 
-class LstmPolicy_Trading(RecurrentActorCriticPolicy):
+class LstmPolicyTrading(RecurrentActorCriticPolicy):
     """
     Policy object that implements actor critic, using LSTMs.
     :param sess: (TensorFlow session) The current TensorFlow session
@@ -83,7 +83,7 @@ class LstmPolicy_Trading(RecurrentActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm=128, reuse=False, layers=[128, 128],
                  act_fun=tf.nn.relu, layer_norm=True):
         # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
-        super(LstmPolicy_Trading, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+        super(LstmPolicyTrading, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                          state_shape=(2 * n_lstm, ), reuse=reuse, scale=False)
 
         with tf.variable_scope("model", reuse=reuse):
@@ -135,33 +135,39 @@ class RLOptimalTradeExecutionApp(threading.Thread):
                                    end_day=None)
 
         self.benchmark = TWAPAlgo()  # define benchmark algo
-        volume = 3  # total volume to trade
-        trade_steps = 50  # total number of time steps available to trade
-        trade_direction = 1
+        self.volume = 3  # total volume to trade
+        self.trade_steps = 50  # total number of time steps available to trade
+        self.trade_direction = 1
 
         # define observation config
-        observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 1, 'norm': True}
+        self.observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 1, 'norm': True}
 
         # define action space
-        action_space = gym.spaces.Box(low=0.0,
+        self.action_space = gym.spaces.Box(low=0.0,
                                       high=1.0,
                                       shape=(1,),
                                       dtype=np.float32)
 
         # construct the environment
-        lob_env = CustomEnv_Trading(show_ui=self.show_ui,
+        """
+        lob_env = CustomEnvTrading(show_ui=self.show_ui,
                                     data_feed=self.lob_feed,
-                                    trade_direction=trade_direction,
-                                    qty_to_trade=volume,
-                                    max_step_range=trade_steps,
+                                    trade_direction=self.trade_direction,
+                                    qty_to_trade=self.volume,
+                                    max_step_range=self.trade_steps,
                                     benchmark_algo=self.benchmark,
-                                    obs_config=observation_space_config,
-                                    action_space=action_space)
+                                    obs_config=self.observation_space_config,
+                                    action_space=self.action_space)
+        """
 
         # Create and wrap the environment
-        self.env = DummyVecEnv([lambda: lob_env])
+        N_ENVS = 1
+        self.env = DummyVecEnv([self.make_env(i) for i in range(N_ENVS)])
 
-        self.time_steps = 10000000
+        # Multi-Processing does not work yet...
+        # self.env = SubprocVecEnv([self.make_env(i) for i in range(N_ENVS)])
+
+        self.time_steps = 20000
         # learning_schedule = LinearSchedule(time_steps, 0.00005, 0.00001)
         learning_schedule = 0.0001
 
@@ -174,8 +180,9 @@ class RLOptimalTradeExecutionApp(threading.Thread):
     def run(self):
 
         self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
-        self.model.save("LSTM_E2E_Paper_model")
+        # self.model.save("LSTM_E2E_Paper_model")
 
+        """
         while True:
 
             # let the trained model step through the environment...
@@ -187,9 +194,39 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 
                 if self.show_ui:
                     self.env.render()
+        """
+
+    def make_env(self, rank, seed=0):
+        """
+        Utility function for multiprocessed env.
+
+        :param env_id: (str) the environment ID
+        :param num_env: (int) the number of environments you wish to have in subprocesses
+        :param seed: (int) the inital seed for RNG
+        :param rank: (int) index of the subprocess
+        """
+        def _init():
+            from stable_baselines.bench.monitor import Monitor
+
+            env = CustomEnvTrading(show_ui=self.show_ui,
+                                   data_feed=self.lob_feed,
+                                   trade_direction=self.trade_direction,
+                                   qty_to_trade=self.volume,
+                                   max_step_range=self.trade_steps,
+                                   benchmark_algo=self.benchmark,
+                                   obs_config=self.observation_space_config,
+                                   action_space=self.action_space)
+            env.seed(seed + rank)
+            env = Monitor(env)
+            return env
+        set_global_seeds(seed)
+        return _init
 
 
 if __name__ == '__main__':
+
+    import time
+    start_time = time.time()
 
     parser = argparse.ArgumentParser(description='RLOptimalTradeExecution')
 
@@ -197,7 +234,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     rl_app = RLOptimalTradeExecutionApp(args)
-    rl_app.start()
+    rl_app.run()
+
+    print("--- %s seconds ---" % (time.time() - start_time))
 
     if args.show_ui:
         rl_app.env.envs[0].ui.exec_qapp()
