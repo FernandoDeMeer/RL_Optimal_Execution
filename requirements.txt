@@ -16,7 +16,7 @@ Keras-Preprocessing==1.1.2
 kiwisolver
 Markdown==3.3.4
 matplotlib
-tensorflow-gpu==1.15.0
+tensorflow-gpu==1.15.5
 numpy
 opencv-python==4.5.3.56
 opt-einsum==3.3.0
