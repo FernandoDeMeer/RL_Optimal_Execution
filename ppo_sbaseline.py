@@ -149,23 +149,23 @@ class RLOptimalTradeExecutionApp(threading.Thread):
                                       dtype=np.float32)
 
         # construct the environment
-        """
-        lob_env = CustomEnvTrading(show_ui=self.show_ui,
-                                    data_feed=self.lob_feed,
-                                    trade_direction=self.trade_direction,
-                                    qty_to_trade=self.volume,
-                                    max_step_range=self.trade_steps,
-                                    benchmark_algo=self.benchmark,
-                                    obs_config=self.observation_space_config,
-                                    action_space=self.action_space)
-        """
 
-        # Create and wrap the environment
-        N_ENVS = 1
-        self.env = DummyVecEnv([self.make_env(i) for i in range(N_ENVS)])
+        if self.show_ui:
+            self.env = DummyVecEnv([lambda: CustomEnvTrading(show_ui=self.show_ui,
+                                                             data_feed=self.lob_feed,
+                                                             trade_direction=self.trade_direction,
+                                                             qty_to_trade=self.volume,
+                                                             max_step_range=self.trade_steps,
+                                                             benchmark_algo=self.benchmark,
+                                                             obs_config=self.observation_space_config,
+                                                             action_space=self.action_space)])
+        else:
+            # Create and wrap the environment
+            N_ENVS = 1
+            self.env = DummyVecEnv([self.make_env(i) for i in range(N_ENVS)])
 
-        # Multi-Processing does not work yet...
-        # self.env = SubprocVecEnv([self.make_env(i) for i in range(N_ENVS)])
+            # Multi-Processing does not work yet...
+            # self.env = SubprocVecEnv([self.make_env(i) for i in range(N_ENVS)])
 
         self.time_steps = 20000
         # learning_schedule = LinearSchedule(time_steps, 0.00005, 0.00001)
@@ -179,22 +179,26 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 
     def run(self):
 
-        self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
-        # self.model.save("LSTM_E2E_Paper_model")
+        if self.show_ui:
+            # Inference mode
 
-        """
-        while True:
+            # todo: load an actual trained model
+            # self.model.load("LSTM_E2E_Paper_model")
 
-            # let the trained model step through the environment...
-            obs = self.env.reset()
-            done = [False]
-            while not done[0]:
-                action, _states = self.model.predict(obs)
-                obs, rewards, done, info = self.env.step(action)
+            while True:
 
-                if self.show_ui:
-                    self.env.render()
-        """
+                # let the trained model step through the environment...
+                obs = self.env.reset()
+                done = [False]
+                while not done[0]:
+                    action, _states = self.model.predict(obs)
+                    obs, rewards, done, info = self.env.step(action)
+
+                    if self.show_ui:
+                        self.env.render()
+        else:
+            self.model.learn(total_timesteps=self.time_steps, tb_log_name="LSTM_E2E_Paper")
+            self.model.save("LSTM_E2E_Paper_model")
 
     def make_env(self, rank, seed=0):
         """
@@ -217,7 +221,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
                                    obs_config=self.observation_space_config,
                                    action_space=self.action_space)
             env.seed(seed + rank)
-            env = Monitor(env)
+            env = Monitor(env=env, filename=None)
             return env
         set_global_seeds(seed)
         return _init
@@ -228,25 +232,16 @@ if __name__ == '__main__':
     import time
     start_time = time.time()
 
-    # import tensorflow as tf
-    #
-    # with tf.device('/gpu:0'):
-    #     a = tf.constant([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], shape=[2, 3], name='a')
-    #     b = tf.constant([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], shape=[3, 2], name='b')
-    #     c = tf.matmul(a, b)
-    #
-    # with tf.Session() as sess:
-    #     print(sess.run(c))
-
     parser = argparse.ArgumentParser(description='RLOptimalTradeExecution')
-
     parser.add_argument('--show_ui', action='store_true')
-    args = parser.parse_args()
+    pargs = parser.parse_args()
 
-    rl_app = RLOptimalTradeExecutionApp(args)
-    rl_app.run()
+    rl_app = RLOptimalTradeExecutionApp(pargs)
+
+    if pargs.show_ui:
+        rl_app.start()
+        rl_app.env.envs[0].ui.exec_qapp()
+    else:
+        rl_app.run()
 
     print("--- %s seconds ---" % (time.time() - start_time))
-
-    if args.show_ui:
-        rl_app.env.envs[0].ui.exec_qapp()
