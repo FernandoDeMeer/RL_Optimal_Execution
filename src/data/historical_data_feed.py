@@ -8,7 +8,7 @@ from src.core.environment.env_utils import raw_to_order_book
 
 
 def get_time_idx_from_raw_data(data, t):
-    """ Returns the index of data right before a given 'time' """
+    """ Returns the index of data right before a given time 't' """
 
     dt = datetime.utcfromtimestamp(data[-1] / 1000)
     start_t = datetime.strptime(t, '%H:%M:%S')
@@ -26,7 +26,7 @@ class HistoricalDataFeed(DataFeed):
         Flat binary format, each float is saved as a float64** in a continuous memory:
             timestamp, 20 ask_prices, 20 ask_quantities, 20 bid_prices, 20 bid_quantities, ..., continuous...
 
-            **float64 is used to accomodate the millisecond timestamp
+            **float64 is used to accommodate the millisecond timestamp
 
         After reading file from disk, do: .reshape(-1, 81)
     """
@@ -75,9 +75,13 @@ class HistoricalDataFeed(DataFeed):
         self._samples_drawn = 0
 
         self.lob_depth = lob_depth
+        self.time = time
+        self.first_time = first_time
+        self.last_time = last_time
         self.reset(time, first_time, last_time)
 
     def next_lob_snapshot(self, previous_lob_snapshot=None, lob_format=True):
+        """ return next snapshot of the limit order book """
 
         assert self._remaining_rows_in_file is not None, (
             'reset() must be called once before next_lob_snapshot()')
@@ -101,15 +105,7 @@ class HistoricalDataFeed(DataFeed):
             return timestamp_dt, lob.reshape(-1, self.lob_depth)
 
     def reset(self, time=None, first_time=None, last_time=None):
-        """
-        Logic for the reset method:
-            * Decide what files to choose whenever reset is called
-            * Check if the file index exists
-                * if so, load data...
-            * Decide what row to start reading data from
-            * Determine remaining number of rows
-
-        """
+        """ Reset the datafeed and set from where to start sampling """
 
         self.time = time
         if first_time is not None:
@@ -138,6 +134,7 @@ class HistoricalDataFeed(DataFeed):
         self._select_row_idx()
 
     def _load_data(self):
+        """ Load data from file """
 
         self.data = np.fromfile("{}/{}/{}".format(self.data_dir,
                                                   self.instrument,
@@ -145,9 +142,7 @@ class HistoricalDataFeed(DataFeed):
         self.data = self.data.reshape(-1, 4 * self.lob_depth + 1)
 
     def _select_row_idx(self):
-        """ method to overwrite for setting '_row_buffer',
-                'data_row_idx' and '_remaining_rows_in_file'
-        """
+        """ method specifically selecting 'data_row_idx' and '_remaining_rows_in_file' """
 
         # 'time' has highest priority
         if self.time is not None:
