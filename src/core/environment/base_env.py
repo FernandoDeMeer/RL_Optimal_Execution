@@ -92,7 +92,8 @@ class BaseEnv(gym.Env, ABC):
         self.remaining_steps = self.max_steps
 
         # get a snapshot of the Limit Order Book.
-        self.data_feed.reset(row_buffer=self.max_steps)
+        #  TODO: Change to inputs potentially to make this flexible
+        self.data_feed.reset()
         _, lob_hist = self.data_feed.next_lob_snapshot()
 
         # store this in two separate histories (allows observation space to see past LOB-snapshots)
@@ -175,7 +176,7 @@ class BaseEnv(gym.Env, ABC):
         self.info = {}
         return self.state, self.reward, self.done, self.info
 
-    def render(self, mode):
+    def render(self, mode='human'):
 
         self.ui.user_interface.update_data([
             {

@@ -6,7 +6,7 @@ import tensorflow as tf
 from stable_baselines import PPO2
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
-from src.data.historical_data_feed import HistFeedRL
+from src.data.historical_data_feed import HistoricalDataFeed
 from stable_baselines.common.policies import LstmPolicy, RecurrentActorCriticPolicy
 from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
@@ -24,8 +24,8 @@ class CustomEnvTrading(BaseEnv):
         super().__init__(show_ui, data_feed, trade_direction, qty_to_trade, max_step_range, benchmark_algo,
                          obs_config, action_space)
 
-    def calc_reward(self,action):
-        if self.time >= self.max_steps-1:
+    def calc_reward(self, action):
+        if self.time >= self.max_steps - 1:
             vwaps = self.trades_monitor.calc_vwaps()
             if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
                 self.reward += 1
@@ -45,13 +45,14 @@ class CustomEnvTrading(BaseEnv):
             bid_items = self.lob_hist_rl[-1].bids.order_map.items()
             available_volume = np.sum([float(bids[1].quantity) for bids in list(bid_items)[-5:]])
 
-        action_volume = action[0]*2*float(self.last_bmk_order['quantity'])
+        action_volume = action[0] * 2 * float(self.last_bmk_order['quantity'])
         if available_volume < action_volume:
             self.reward -= 2
 
 
 class CustomLSTMPolicy(LstmPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, act_fun=tf.nn.relu, n_lstm=128, reuse=False, **_kwargs):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, act_fun=tf.nn.relu, n_lstm=128, reuse=False,
+                 **_kwargs):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm, reuse, act_fun,
                          net_arch=[128, 128, 'lstm'],
                          layer_norm=True, feature_extraction="mlp", **_kwargs)
@@ -84,7 +85,7 @@ class LstmPolicyTrading(RecurrentActorCriticPolicy):
                  act_fun=tf.nn.relu, layer_norm=True):
         # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
         super(LstmPolicyTrading, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                         state_shape=(2 * n_lstm, ), reuse=reuse, scale=False)
+                                                state_shape=(2 * n_lstm,), reuse=reuse, scale=False)
 
         with tf.variable_scope("model", reuse=reuse):
             extracted_features = tf.layers.flatten(self.processed_obs)
@@ -94,7 +95,7 @@ class LstmPolicyTrading(RecurrentActorCriticPolicy):
             input_sequence = batch_to_seq(extracted_features, self.n_env, n_steps)
             masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
             rnn_output, self.snew = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm,
-                                             layer_norm=layer_norm)
+                                         layer_norm=layer_norm)
             rnn_output = seq_to_batch(rnn_output)
             value_fn = linear(rnn_output, 'vf', 1)
 
@@ -128,11 +129,11 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 
         # construct a data feed
         dir = os.path.join(ROOT_DIR, 'data_dir')
-        self.lob_feed = HistFeedRL(data_dir=dir,
-                                   instrument='btc_usdt',
-                                   lob_depth=20,
-                                   start_day=None,
-                                   end_day=None)
+        self.lob_feed = HistoricalDataFeed(data_dir=dir,
+                                           instrument='btcusdt',
+                                           first_time="00:00:00",
+                                           last_time="22:00:00",
+                                           samples_per_file=200)
 
         self.benchmark = TWAPAlgo()  # define benchmark algo
         self.volume = 3  # total volume to trade
@@ -144,9 +145,9 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 
         # define action space
         self.action_space = gym.spaces.Box(low=0.0,
-                                      high=1.0,
-                                      shape=(1,),
-                                      dtype=np.float32)
+                                           high=1.0,
+                                           shape=(1,),
+                                           dtype=np.float32)
 
         # construct the environment
 
@@ -209,6 +210,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
         :param seed: (int) the inital seed for RNG
         :param rank: (int) index of the subprocess
         """
+
         def _init():
             from stable_baselines.bench.monitor import Monitor
 
@@ -223,6 +225,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
             env.seed(seed + rank)
             env = Monitor(env=env, filename=None)
             return env
+
         set_global_seeds(seed)
         return _init
 
@@ -230,6 +233,7 @@ class RLOptimalTradeExecutionApp(threading.Thread):
 if __name__ == '__main__':
 
     import time
+
     start_time = time.time()
 
     parser = argparse.ArgumentParser(description='RLOptimalTradeExecution')
