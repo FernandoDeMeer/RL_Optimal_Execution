@@ -8,25 +8,64 @@ import tensorflow as tf
 
 from stable_baselines import PPO2
 from stable_baselines.bench.monitor import Monitor
+from stable_baselines.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines.common.tf_layers import linear, lstm
+from stable_baselines.common.callbacks import BaseCallback
 from stable_baselines.common.callbacks import CheckpointCallback
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
-from stable_baselines.common.vec_env import SubprocVecEnv
 from stable_baselines.common.policies import LstmPolicy, RecurrentActorCriticPolicy
 
 from src.core.environment.base_env import BaseEnv
-from src.data.historical_data_feed import HistFeedRL
+from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.execution_algo import TWAPAlgo
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+class CustomCallback(BaseCallback):
+
+    def __init__(self, verbose=0):
+        super(CustomCallback, self).__init__(verbose)
+        # Those variables will be accessible in the callback
+        # (they are defined in the base class)
+        # The RL model
+        # self.model = None  # type: BaseRLModel
+        # An alias for self.model.get_env(), the environment used for training
+        # self.training_env = None  # type: Union[gym.Env, VecEnv, None]
+        # Number of time the callback was called
+        # self.n_calls = 0  # type: int
+        # self.num_timesteps = 0  # type: int
+        # local and global variables
+        # self.locals = None  # type: Dict[str, Any]
+        # self.globals = None  # type: Dict[str, Any]
+        # The logger object, used to report things in the terminal
+        # self.logger = None  # type: logger.Logger
+        # # Sometimes, for event callback, it is useful
+        # # to have access to the parent object
+        # self.parent = None  # type: Optional[BaseCallback]
+
+    def _on_training_start(self) -> None:
+        print("#### _on_training_start ####")
+
+    def _on_rollout_start(self) -> None:
+        print("#### _on_rollout_start ####")
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        print("#### _on_rollout_end ####")
+
+    def _on_training_end(self) -> None:
+        print("#### _on_training_end ####")
+
+
 class CustomEnvTrading(BaseEnv):
 
     def __init__(self, data_feed, trade_direction, qty_to_trade, max_step_range, benchmark_algo,
                  obs_config, action_space):
-        super().__init__(data_feed, trade_direction, qty_to_trade, max_step_range, benchmark_algo,
+        super().__init__(None, data_feed, trade_direction, qty_to_trade, max_step_range, benchmark_algo,
                          obs_config, action_space)
 
     def calc_reward(self,action):
@@ -56,72 +95,11 @@ class CustomEnvTrading(BaseEnv):
 
 
 class CustomLSTMPolicy(LstmPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, act_fun=tf.nn.relu, n_lstm=128, reuse=False, **_kwargs):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, act_fun=tf.nn.relu, n_lstm=128,
+                 reuse=False, **_kwargs):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm, reuse, act_fun,
                          net_arch=[128, 128, 'lstm'],
                          layer_norm=True, feature_extraction="mlp", **_kwargs)
-
-
-class LstmPolicyTrading(RecurrentActorCriticPolicy):
-    """
-    Policy object that implements actor critic, using LSTMs.
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param n_lstm: (int) The number of LSTM cells (for recurrent policies)
-    :param reuse: (bool) If the policy is reusable or not
-    :param layers: ([int]) The size of the Neural network before the LSTM layer  (if None, default to [64, 64])
-    :param net_arch: (list) Specification of the actor-critic policy network architecture. Notation similar to the
-        format described in mlp_extractor but with additional support for a 'lstm' entry in the shared network part.
-    :param act_fun: (tf.func) the activation function to use in the neural network.
-    :param cnn_extractor: (function (TensorFlow Tensor, ``**kwargs``): (TensorFlow Tensor)) the CNN feature extraction
-    :param layer_norm: (bool) Whether or not to use layer normalizing LSTMs
-    :param feature_extraction: (str) The feature extraction type ("cnn" or "mlp")
-    :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
-    """
-
-    recurrent = True
-
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm=128, reuse=False, layers=[128, 128],
-                 act_fun=tf.nn.relu, layer_norm=True):
-        # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
-        super(LstmPolicyTrading, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                         state_shape=(2 * n_lstm, ), reuse=reuse, scale=False)
-
-        with tf.variable_scope("model", reuse=reuse):
-            extracted_features = tf.layers.flatten(self.processed_obs)
-            for i, layer_size in enumerate(layers):
-                extracted_features = act_fun(linear(extracted_features, 'pi_fc' + str(i),
-                                                    n_hidden=layer_size, init_scale=np.sqrt(2)))
-            input_sequence = batch_to_seq(extracted_features, self.n_env, n_steps)
-            masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
-            rnn_output, self.snew = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm,
-                                             layer_norm=layer_norm)
-            rnn_output = seq_to_batch(rnn_output)
-            value_fn = linear(rnn_output, 'vf', 1)
-
-            self._proba_distribution, self._policy, self.q_value = \
-                self.pdtype.proba_distribution_from_latent(rnn_output, rnn_output)
-
-        self._value_fn = value_fn
-        self._setup_init()
-
-    def step(self, obs, state=None, mask=None, deterministic=False):
-        if deterministic:
-            return self.sess.run([self.deterministic_action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
-        else:
-            return self.sess.run([self.action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
-
-    def proba_step(self, obs, state=None, mask=None):
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
-
-    def value(self, obs, state=None, mask=None):
-        return self.sess.run(self.value_flat, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
 
 
 class RLOptimalTradeExecutionApp:
@@ -135,11 +113,11 @@ class RLOptimalTradeExecutionApp:
         def make_env(seed):
 
             def _init():
-                lob_feed = HistFeedRL(data_dir=self.data_dir,
-                                      instrument='btc_usdt',
-                                      lob_depth=20,
-                                      start_day=None,
-                                      end_day=None)
+                lob_feed = HistoricalDataFeed(data_dir=self.data_dir,
+                                              instrument='btc_usdt',
+                                              lob_depth=20,
+                                              start_day=None,
+                                              end_day=None)
 
                 # define benchmark algo
                 benchmark = TWAPAlgo()
@@ -160,17 +138,40 @@ class RLOptimalTradeExecutionApp:
                                        benchmark_algo=benchmark,
                                        obs_config=observation_space_config,
                                        action_space=action_space)
-
-                env = Monitor(env, None, allow_early_resets=True)
+                env = Monitor(env, None)
                 env.seed(seed)
                 return env
 
             return _init
 
-        # either use the for loop int's as seed or should define our own seeds.
-        nr_cpus = min(os.cpu_count(), params["app"]["max_envs"])
-        envs = SubprocVecEnv([make_env(i) for i in range(nr_cpus)])
+        """
+        env = make_env(0)()
+        env.reset()
 
+        nr_episodes = 10000
+        for i in tqdm(range(nr_episodes)):
+            action = env.action_space.sample()
+            obs, reward, done, _ = env.step(action)
+
+            if done:
+                # print("done")
+                _ = env.reset()
+        print("break it")
+        """
+
+        # either use the for loop int's as seed or should define our own seeds.
+        nr_cpus = params["app"]["nr_envs"]
+
+        # envs = DummyVecEnv([make_env(i) for i in range(nr_cpus)],
+        #                    # start_method='fork'
+        #                    )
+        envs = SubprocVecEnv([make_env(i) for i in range(nr_cpus)],
+                             # start_method='fork'
+                             )
+
+        # CustomLSTMPolicy
+        # MlpPolicy
+        # CustomLSTMPolicy
         self.model = PPO2(CustomLSTMPolicy, envs, verbose=1,
                           gamma=params["train"]["gamma"],
                           n_steps=params["train"]["n_steps"],
@@ -188,7 +189,8 @@ class RLOptimalTradeExecutionApp:
                                                  name_prefix='ppo_model')
 
         self.model.learn(total_timesteps=self.params["train"]["total_time_steps"],
-                         callback=checkpoint_callback)
+                         callback=[checkpoint_callback,
+                                   CustomCallback()])
 
         self.model.save("{}/models/ppo_model_final".format(self.data_dir))
 
@@ -196,7 +198,7 @@ class RLOptimalTradeExecutionApp:
 params = {
     "app":
         {
-            "max_envs": 4,
+            "nr_envs": 32,
         },
     "env":
         {
@@ -206,8 +208,7 @@ params = {
         },
     "train":
         {
-            "gamma": 0.99,
-            "n_steps": 2048,
+            "n_steps": 128,
             "learning_rate": 0.0001,
             "save_model_freq": 1000,
             "total_time_steps": 1000000,
