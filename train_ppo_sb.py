@@ -198,20 +198,21 @@ class RLOptimalTradeExecutionApp:
 params = {
     "app":
         {
-            "nr_envs": 32,
+            "nr_envs": 40,
         },
     "env":
         {
-            "trade_steps": 50,
+            "trade_steps": 3 * 60 * 60, # 3 hours in seconds 10800 seconds
             "trade_direction": 1,
             "qty_to_trade": 3,
         },
     "train":
         {
             "n_steps": 128,
+            "gamma": 0.99,
             "learning_rate": 0.0001,
             "save_model_freq": 1000,
-            "total_time_steps": 1000000,
+            "total_time_steps": 1000000000,
         },
 }
 
