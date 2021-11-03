@@ -11,7 +11,7 @@ import numpy as np
 from src.data.historical_data_feed import HistFeedRL
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
-from src.core.agent.policy import get_policy_config
+from src.core.agent.ray_policy import get_policy_config
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents import ppo
 from ray.rllib.agents.ppo import PPOTrainer
@@ -54,7 +54,8 @@ def lob_env_creator(env_config):
         "obs_config": observation_space_config,
         "action_space": action_space
     }
-    lob_env = BaseEnv(data_feed=env_config["data_feed"],
+    lob_env = BaseEnv(show_ui=False,
+                      data_feed=env_config["data_feed"],
                       trade_direction=env_config["trade_direction"],
                       qty_to_trade=env_config["qty_to_trade"],
                       max_step_range=env_config["max_step_range"],
@@ -67,9 +68,9 @@ if __name__ == "__main__":
 
     # first Declare where to store checkpoints and tensorboard result files
 
-    chkpt_root = "../../tmp/chkpt"
+    chkpt_root = "/tmp/chkpt"
     shutil.rmtree(chkpt_root,ignore_errors=True,onerror=None)
-    ray_results_dir = "../../ray_results"
+    ray_results_dir = "/ray_results"
     shutil.rmtree(ray_results_dir, ignore_errors=True, onerror=None)
 
     # Model config

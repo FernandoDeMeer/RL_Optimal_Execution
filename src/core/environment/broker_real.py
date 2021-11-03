@@ -114,7 +114,7 @@ class Broker(ABC):
             if order_temp_bmk['type'] == 'limit':
                 # update the price also
                 if order_temp_bmk['side'] == 'bid' and order_temp_bmk['price'] < lob_bmk.get_best_bid():
-                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
+                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size # Don't orders not previously executed already have a set price? This updates their price on every new lob
                 if order_temp_bmk['side'] == 'ask' and order_temp_bmk['price'] > lob_bmk.get_best_ask():
                     order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size()
             self.remaining_order['benchmark_algo'] = []
@@ -193,15 +193,15 @@ if __name__ == '__main__':
     # define the benchmark algo
     algo = TWAPAlgo(trade_direction=1,
                     volume=500,
-                    start_time='08:45:00',
+                    start_time='08:35:05',
                     end_time='09:00:00',
                     no_of_slices=3,
-                    bucket_placement_func=lambda slices: (sorted([round(random.uniform(0, 1), 2) for i in range(3)])))
+                    bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
-    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
+    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
-                                  instrument='btcusdt',
+                                  instrument='btc_usdt',
                                   samples_per_file=200)
 
     # define the broker class

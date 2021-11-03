@@ -81,16 +81,16 @@ class Bucket:
         b_bounds = [self.start_time]
         while b_bounds[-1] < self.end_time:
             if rand_width:
-                rand_add = randint(-rand_width, rand_width)
+                rand_add = randint(-rand_width, rand_width) # rand_width should be a % of the bucket_width, otherwise the bounds could be non-increasing.
             else:
                 rand_add = 0
-            b_bounds.append(b_bounds[-1] + timedelta(0, self.bucket_width + rand_add))
+            b_bounds.append(b_bounds[-1] + timedelta(days= 0, seconds= self.bucket_width * (rand_add/100)))
 
         # delete if one was added too much
         if b_bounds[-1] >= self.end_time:
             del b_bounds[-1]
 
-        # finally add the end time of the bucket & set length
+        # finally add the end time of the last bucket & set length
         b_bounds.append(self.end_time)
         n_buckets = len(b_bounds) - 1
 
@@ -106,10 +106,11 @@ class ExecutionAlgo:
             trade_direction (int): The direction of the trade to execute
             volume (int): volume to trade (i.e. parent order volume)
             start_time (string): start of execution in '%H:%M:%S' format
-            end_time (string):  end of execution in '%H:%M:%S' format
+            end_time (string): end of execution in '%H:%M:%S' format
             no_of_slices (int): number of order splits within a bucket
-            bucket_placement_func (func): function returning random splits of bucket
-            slice_rand (func): returns a random split as to when to place orders within a bucket
+            bucket_placement_func (func): function returning random splits of buckets
+            tick_size (Decimal): tick size of the market the RL agent is trained on
+            rand_bucket_bounds_width (int): Max % of the bucket width to add/substract from each bucket
 
     """
 
@@ -120,7 +121,7 @@ class ExecutionAlgo:
                  bucket_placement_func,
                  start_time=None,
                  end_time=None,
-                 rand_bucket_bounds=None,
+                 rand_bucket_bounds_width=None,
                  tick_size=None):
 
         # Raw inputs
@@ -133,7 +134,7 @@ class ExecutionAlgo:
         self.tick_size = tick_size
         if tick_size is not None:
             self.tick_size = Decimal(str(tick_size))
-        self.rand_bucket_bounds = rand_bucket_bounds
+        self.rand_bucket_bounds_width = rand_bucket_bounds_width
 
     def reset(self, date, start_time=None, end_time=None, tick_size=None):
 
@@ -141,16 +142,16 @@ class ExecutionAlgo:
             self.start_time = start_time
             self.end_time = end_time
         if self.start_time is None or self.end_time is None:
-            raise ValueError('Both start_time and end_time need to be definded!!')
+            raise ValueError('Both start_time and end_time need to be defined!!')
 
         if tick_size is not None:
             self.tick_size = tick_size
 
         # Derive trading schedules
         self.date = date
-        strt = datetime.combine(date, datetime.strptime(self.start_time, '%H:%M:%S').time())
-        ed = datetime.combine(date, datetime.strptime(self.end_time, '%H:%M:%S').time())
-        self.buckets = Bucket(strt, ed, self.rand_bucket_bounds)
+        start_time = datetime.combine(date, datetime.strptime(self.start_time, '%H:%M:%S').time())
+        end_time = datetime.combine(date, datetime.strptime(self.end_time, '%H:%M:%S').time())
+        self.buckets = Bucket(start_time, end_time, self.rand_bucket_bounds_width)
 
         # split volume across buckets and check if this worked
         self._split_volume_across_buckets()
@@ -174,7 +175,7 @@ class ExecutionAlgo:
     def _sample_execution_times(self):
         exec_times = []
 
-        for i in range(0, len(self.buckets.bucket_bounds) - 1):
+        for i in range(0, self.buckets.n_buckets):
             bucket_trades = _get_execution_times(self, i)
             # make sure trade times are different from each other and from bucket bounds
             while len(set(bucket_trades)) < self.no_of_slices or \
