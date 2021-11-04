@@ -69,8 +69,8 @@ class Bucket:
             dur_key = "10m"
         else:
             dur_key = str(math.ceil(duration_in_m)) + "m"
-        b_size = BUCKET_SIZES_IN_SECS[dur_key]
-        return b_size
+        bucket_width = BUCKET_SIZES_IN_SECS[dur_key]
+        return bucket_width
 
     def bucket_bounds(self, rand_width):
         """ Constructs bounds of the buckets which can be randomised """
@@ -84,7 +84,7 @@ class Bucket:
                 rand_add = randint(-rand_width, rand_width) # rand_width should be a % of the bucket_width, otherwise the bounds could be non-increasing.
             else:
                 rand_add = 0
-            b_bounds.append(b_bounds[-1] + timedelta(days= 0, seconds= self.bucket_width * (rand_add/100)))
+            b_bounds.append(b_bounds[-1] + timedelta(days= 0, seconds= self.bucket_width * ( 1 + rand_add/100)))
 
         # delete if one was added too much
         if b_bounds[-1] >= self.end_time:

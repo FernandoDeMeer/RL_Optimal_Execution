@@ -193,7 +193,7 @@ if __name__ == '__main__':
     # define the benchmark algo
     algo = TWAPAlgo(trade_direction=1,
                     volume=500,
-                    start_time='08:35:05',
+                    start_time='08:45:00',
                     end_time='09:00:00',
                     no_of_slices=3,
                     bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
