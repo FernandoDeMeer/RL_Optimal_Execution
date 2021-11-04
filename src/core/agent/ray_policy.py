@@ -28,7 +28,7 @@ def get_policy_config(model_config):
     }
 
     stop = {
-        "training_iteration": 50, #Number of iterations to train
+        "training_iteration": 500, #Number of iterations to train
         "timesteps_total": 10000, #Maximum number of timesteps to take
         "episode_reward_mean": 0.8, #Stop if the average reward per episode is bigger than episode_reward_mean
     }

@@ -8,7 +8,7 @@ from ray import tune
 import gym
 import numpy as np
 
-from src.data.historical_data_feed import HistFeedRL
+from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.execution_algo import TWAPAlgo
 from src.core.environment.base_env import BaseEnv
 from src.core.agent.ray_policy import get_policy_config
@@ -24,7 +24,7 @@ def lob_env_creator(env_config):
     import os
     # Construct the data feed
     dir = os.path.join(ROOT_DIR, 'data_dir')
-    lob_feed = HistFeedRL(data_dir=dir,
+    lob_feed = HistoricalDataFeed(data_dir=dir,
                           instrument='btc_usdt',
                           lob_depth=20,
                           start_day=None,
