@@ -3,6 +3,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from decimal import Decimal
 from random import randint
+import random
+random.seed(a=2)
 
 
 BUCKET_SIZES_IN_SECS = {"1m": 7,
@@ -226,6 +228,7 @@ class ExecutionAlgo:
                      'quantity': self.volumes_per_trade[self.bucket_idx][self.order_idx],
                      'price': p,
                      'trade_id': trade_id}
+            self.order_idx += 1
         elif event['type'] == 'bucket_bound':
             # place a market order with remaining volume left in bucket
             order = {'type': 'market',
@@ -236,10 +239,8 @@ class ExecutionAlgo:
         else:
             raise ValueError('No such event type allowed !!!')
 
-        self.order_idx += 1
-        if self.order_idx / self.no_of_slices > 1:
+        if self.order_idx / self.no_of_slices >= 1:
             self.order_idx = 0
-            self.bucket_idx += 1
 
         order_out = None
         if order['quantity'] > 0:
@@ -247,15 +248,16 @@ class ExecutionAlgo:
             order_out = order
         return order_out
 
-    def update_remaining_volume(self, traded_volume):
-        if self.order_idx == 0:
-            b_idx = self.bucket_idx - 1
-        else:
-            b_idx = self.bucket_idx
-        self.vol_remaining -= Decimal(str(traded_volume))
-        self.bucket_vol_remaining[b_idx] -= Decimal(str(traded_volume))
-        if self.vol_remaining < 0 or self.bucket_vol_remaining[b_idx] < 0:
+    def update_remaining_volume(self, trade_log, event_type=None):
+        if trade_log is not None and trade_log['quantity'] > 0:
+            self.vol_remaining -= Decimal(str(trade_log['quantity']))
+            self.bucket_vol_remaining[self.bucket_idx] -= Decimal(str(trade_log['quantity']))
+
+        if self.vol_remaining < 0 or self.bucket_vol_remaining[self.bucket_idx] < 0:
             raise ValueError("More volume than available placed!")
+
+        if event_type is not None and event_type == 'bucket_bound':
+            self.bucket_idx += 1
 
     def plot_schedule(self, trade_logs=None):
         """ Plots the expected execution schedule determined ahead of trading """

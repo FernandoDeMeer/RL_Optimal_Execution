@@ -18,13 +18,13 @@ def calc_volume_weighted_price_from_trades(trades):
 
 def place_order(lob, dt, order):
     """ places an order into the LOB """
-
+    ord = order.copy()
     trade_message = None
-    if order['quantity'] > 0:
-        if order['type'] == 'limit':
-            trades, _ = lob.process_order(order, False, False)
+    if ord['quantity'] > 0:
+        if ord['type'] == 'limit':
+            trades, _ = lob.process_order(ord, False, False)
         else:
-            trades, _ = lob.process_order(order, True, False)
+            trades, _ = lob.process_order(ord, True, False)
         if trades:
             vol_wgt_price, vol = calc_volume_weighted_price_from_trades(trades)
             msg = 'trade'
@@ -77,18 +77,18 @@ class Broker(ABC):
 
         # get info from the algo about the type and time of next event
         event, done = self.benchmark_algo.get_next_event()
-
+        if event['type'] == 'bucket_bound':
+            a=0
         while self.hist_dict['timestamp'][-1] < event['time']:
             # just update the LOB history if nothing happens
             dt, lob = self.data_feed.next_lob_snapshot()
             self._record_lob(dt, lob)
-            order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-            bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
+            if self.hist_dict['timestamp'][-1] < event['time']:
+                order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
 
-            # update the remaining quantities to trade in the benchmark algo
-            if bmk_log is not None and bmk_log['quantity'] > 0:
-                print(bmk_log['quantity'])
-                self.benchmark_algo.update_remaining_volume(bmk_log['quantity'])
+                # update the remaining quantities to trade in the benchmark algo
+                self.benchmark_algo.update_remaining_volume(bmk_log)
 
         return event, done
 
@@ -146,10 +146,15 @@ class Broker(ABC):
             if bmk_log is not None:
                 self.trade_logs['benchmark_algo'].append(bmk_log)
 
-            bmk_order_temp = benchmark_order.copy()
-            bmk_order_temp['quantity'] -= bmk_log['quantity']
-            if bmk_order_temp['quantity'] > 0:
-                self.remaining_order['benchmark_algo'].append(bmk_order_temp)
+            # bmk_order_temp = benchmark_order
+            # bmk_order_temp = benchmark_order.copy()
+            benchmark_order['quantity'] -= bmk_log['quantity']
+            if benchmark_order['quantity'] > 0:
+                self.remaining_order['benchmark_algo'].append(benchmark_order)
+            else:
+                self.remaining_order['benchmark_algo'] = []
+            if benchmark_order['type'] == 'market':
+                self.remaining_order['benchmark_algo'] = []
 
         if rl_order is not None:
 
@@ -164,6 +169,10 @@ class Broker(ABC):
             rl_order_temp['quantity'] -= rl_log['quantity']
             if rl_order_temp['quantity'] > 0:
                 self.remaining_order['rl_algo'].append(rl_order_temp)
+            else:
+                self.remaining_order['rl_algo'] = []
+            if rl_order_temp['type'] == 'market':
+                self.remaining_order['rl_algo'] = []
         return bmk_log, rl_log
 
     def simulate_algo(self, algo):
@@ -178,9 +187,7 @@ class Broker(ABC):
             bmk_log, _ = self.place_orders(algo_order)
 
             # update the remaining quantities to trade
-            if bmk_log is not None and bmk_log['quantity'] > 0:
-                print(bmk_log['quantity'])
-                self.benchmark_algo.update_remaining_volume(bmk_log['quantity'])
+            self.benchmark_algo.update_remaining_volume(bmk_log, event['type'])
 
 
 if __name__ == '__main__':
@@ -193,13 +200,14 @@ if __name__ == '__main__':
     # define the benchmark algo
     algo = TWAPAlgo(trade_direction=1,
                     volume=500,
-                    start_time='08:45:00',
+                    start_time='08:35:05',
                     end_time='09:00:00',
                     no_of_slices=3,
                     bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
-    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    # dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',
                                   samples_per_file=200)
@@ -211,6 +219,10 @@ if __name__ == '__main__':
 
 
     # ToDo:
+    # Debugging:
+    #   hist_dict has gaps when trades at events are placed!
+
+
     #   * cancel remaining orders upon bucket end
     #   * possibly introduce a max depth to be able to trade in the order book
     #   * too slow, no need to loop through the entire thing if no trades remaining!!
