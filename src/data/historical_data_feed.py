@@ -104,6 +104,27 @@ class HistoricalDataFeed(DataFeed):
         else:
             return timestamp_dt, lob.reshape(-1, self.lob_depth)
 
+    def past_lob_snapshots(self, no_of_past_lobs, lob_format=True):
+        """ return past snapshots of the limit order book """
+
+        past_lobs = self.data[self.data_row_idx-no_of_past_lobs:self.data_row_idx ]
+        timestamp_dts =[]
+        for lob in past_lobs:
+            timestamp_dts.append(datetime.utcfromtimestamp(lob[0] / 1000))
+
+        output = []
+        if lob_format:
+            for lob in past_lobs:
+                lob_out = raw_to_order_book(current_book=lob[1:].reshape(-1, self.lob_depth),
+                                            time=datetime.utcfromtimestamp(lob[0] / 1000).strftime('%Y-%m-%d %H:%M:%S.%f'),
+                                            depth=self.lob_depth)
+                output.append(lob_out)
+            return timestamp_dts, output
+        else:
+            for lob in past_lobs:
+                output.append(lob.reshape(-1, self.lob_depth))
+            return timestamp_dts, output
+
     def reset(self, time=None, first_time=None, last_time=None):
         """ Reset the datafeed and set from where to start sampling """
 

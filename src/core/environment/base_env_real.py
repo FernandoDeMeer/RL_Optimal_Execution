@@ -7,6 +7,7 @@ from decimal import Decimal
 from abc import ABC
 from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.execution_algo_real import ExecutionAlgo
+from src.core.environment.broker_real import Broker
 from src.ui.user_interface import UIAppWindow, UserInterface
 import time
 import copy

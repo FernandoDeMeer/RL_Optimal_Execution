@@ -73,22 +73,28 @@ class Broker(ABC):
         self._record_lob(dt, lob)
 
     def _simulate_to_next_order(self):
-        """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point """
+        """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
+         remaining orders.
+         """
 
         # get info from the algo about the type and time of next event
         event, done = self.benchmark_algo.get_next_event()
-        if event['type'] == 'bucket_bound':
-            a=0
-        while self.hist_dict['timestamp'][-1] < event['time']:
-            # just update the LOB history if nothing happens
-            dt, lob = self.data_feed.next_lob_snapshot()
-            self._record_lob(dt, lob)
-            if self.hist_dict['timestamp'][-1] < event['time']:
-                order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
 
-                # update the remaining quantities to trade in the benchmark algo
-                self.benchmark_algo.update_remaining_volume(bmk_log)
+        if len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+            # If we have remaining orders go through the LOBs until they are executed
+            while len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+                # Loop through the LOBs
+                dt, lob = self.data_feed.next_lob_snapshot()
+                self._record_lob(dt, lob)
+                if self.hist_dict['timestamp'][-1] < event['time']:
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
+
+                    # update the remaining quantities to trade in the benchmark algo
+                    self.benchmark_algo.update_remaining_volume(bmk_log)
+        else:
+            # If we have no remaining orders we reset the datafeed to jump to the LOB corresponding to the next event.
+            self.data_feed.reset(time='{}:{}:{}'.format(event['time'].hour,event['time'].minute,event['time'].second))
 
         return event, done
 
@@ -206,8 +212,8 @@ if __name__ == '__main__':
                     bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
-    # dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
-    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
+    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    # dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',
                                   samples_per_file=200)
@@ -221,15 +227,12 @@ if __name__ == '__main__':
     # ToDo:
     # Debugging:
     #   hist_dict has gaps when trades at events are placed!
-
-
-    #   * cancel remaining orders upon bucket end
+    #   * cancel remaining orders upon bucket end -- DONE (lines 157-18 175-176)
     #   * possibly introduce a max depth to be able to trade in the order book
-    #   * too slow, no need to loop through the entire thing if no trades remaining!!
+    #   * too slow, no need to loop through the entire thing if no trades remaining!! -- DONE (func _update_remaining_orders)
     #   * Bugs: plot: fix time axis
-    #   * discuss with others how to make this faster
     #   * migrate this into a new env
-    #   * implement an initialisation class that draws randomly from starting points
+    #   * implement an initialisation class that draws randomly from starting points -- Now done in the BaseEnv, maybe make it a function of the ExecutionAlgo base class?
 
 
 
