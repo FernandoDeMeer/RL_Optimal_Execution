@@ -92,9 +92,26 @@ class Broker(ABC):
 
                     # update the remaining quantities to trade in the benchmark algo
                     self.benchmark_algo.update_remaining_volume(bmk_log)
-        else:
-            # If we have no remaining orders we reset the datafeed to jump to the LOB corresponding to the next event.
-            self.data_feed.reset(time='{}:{}:{}'.format(event['time'].hour,event['time'].minute,event['time'].second))
+                else:
+                    # We have reached the next event with unexecuted volume, if we are not at the end of a bucket
+                    # we add it to the volume of next order
+                    if event['type'] == 'order_placement':
+                        bmk_unexecuted_vol = self.remaining_order['benchmark_algo'][0]['quantity']
+                        # rl_unexecuted_vol = self.remaining_order['rl_algo'][0]['quantity']
+
+                        self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += bmk_unexecuted_vol
+                        # self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += rl_unexecuted_vol
+
+                    # If the event is a bucket end, the market order will be placed according to the bucket_vol_remaining.
+                    # Either way, we remove the remaining orders.
+                    self.remaining_order['benchmark_algo'] = []
+                    self.remaining_order['rl_algo'] = []
+
+        # If we have no remaining orders (for example after executing an entire limit order or after a bucket end),
+        # we reset the datafeed to jump to the LOB corresponding to the next event.
+        self.data_feed.reset(time='{}:{}:{}'.format(event['time'].hour,event['time'].minute,event['time'].second))
+        dt, lob = self.data_feed.next_lob_snapshot()
+        self._record_lob(dt, lob)
 
         return event, done
 
@@ -120,7 +137,7 @@ class Broker(ABC):
             if order_temp_bmk['type'] == 'limit':
                 # update the price also
                 if order_temp_bmk['side'] == 'bid' and order_temp_bmk['price'] < lob_bmk.get_best_bid():
-                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size # Don't orders not previously executed already have a set price? This updates their price on every new lob
+                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
                 if order_temp_bmk['side'] == 'ask' and order_temp_bmk['price'] > lob_bmk.get_best_ask():
                     order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size()
             self.remaining_order['benchmark_algo'] = []

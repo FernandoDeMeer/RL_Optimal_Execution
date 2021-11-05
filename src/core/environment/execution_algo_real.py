@@ -168,7 +168,7 @@ class ExecutionAlgo:
 
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []
-        self.bucket_vol_remaining = self.bucket_volumes
+        self.bucket_vol_remaining = self.bucket_volumes.copy()
         self.current_time = self.start_time
         self.event_idx = 0
         self.order_idx = 0
