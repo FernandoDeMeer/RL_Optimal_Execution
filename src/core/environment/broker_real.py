@@ -69,7 +69,8 @@ class Broker(ABC):
         # get the tick size implied by LOB data
         v = lob.bids.get_price_list(lob.get_best_bid()).volume
         tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
-        self.benchmark_algo.reset(dt.date(), start_time=start_time, end_time=end_time, tick_size=tick)
+        if type(benchmark_algo).__name__ is not 'RLAlgo':
+            self.benchmark_algo.reset(dt.date(), start_time=start_time, end_time=end_time, tick_size=tick)
         self._record_lob(dt, lob)
 
     def _simulate_to_next_order(self):

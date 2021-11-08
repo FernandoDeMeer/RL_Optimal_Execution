@@ -348,3 +348,28 @@ class TWAPAlgo(ExecutionAlgo):
             split_vols.append(vols_per_trade)
 
         self.volumes_per_trade = split_vols
+
+class RLAlgo(ExecutionAlgo):
+    """ Implementation of a RL Execution Algo class to use with the Broker """
+
+    def __init__(self, benchmark_algo, *args, **kwargs):
+        super(RLAlgo, self).__init__(*args, **kwargs)
+        self.algo_events = benchmark_algo.algo_events
+        self.date = benchmark_algo.date
+        self.execution_times = benchmark_algo.execution_times
+        self.buckets = benchmark_algo.buckets
+        self.bucket_volumes = benchmark_algo.algo_events
+        self.bucket_vol_remaining = benchmark_algo.bucket_volumes.copy()
+        self.volumes_per_trade = []
+        for bucket in range(len(benchmark_algo.volumes_per_trade)):
+            self.volumes_per_trade.append(list([Decimal(0) for order_event in benchmark_algo.volumes_per_trade[bucket]]))
+
+        self.vol_remaining = Decimal(str(self.volume))
+        self.placed_orders = []
+        self.bucket_vol_remaining = self.bucket_volumes.copy()
+        self.current_time = self.start_time
+        self.event_idx = 0
+        self.order_idx = 0
+        self.bucket_idx = 0
+
+
