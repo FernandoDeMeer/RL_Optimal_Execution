@@ -69,7 +69,7 @@ class BaseEnv(gym.Env, ABC):
         execution_horizon = datetime.strptime('{}:{}:{}'.format(0,
                                                                 random.randint(0,59),
                                                                 random.randint(0,59)),'%H:%M:%S').time() #Set execution horizon within the minute scale
-        self.benchmark_algo = TWAPAlgo(trade_direction= 1,  # Train different models for each trade_direction
+        self.broker.benchmark_algo = TWAPAlgo(trade_direction= 1,  # Train different models for each trade_direction
                                             volume= random.randint(500,1000),
                                             no_of_slices= random.randint(3,10),
                                             bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])),
@@ -77,15 +77,15 @@ class BaseEnv(gym.Env, ABC):
                                             end_time= str((datetime.strptime(start_time,'%H:%M:%S') + timedelta(hours= execution_horizon.hour,minutes=execution_horizon.minute,seconds=execution_horizon.second)).time()),
                                             rand_bucket_bounds_width= random.randint(10, 20)  # % of the bucket_size
                                             )
-        broker.simulate_algo(self.benchmark_algo)
-        self.rl_algo = RLAlgo(benchmark_algo= self.benchmark_algo,
-                              trade_direction=self.benchmark_algo.trade_direction,
-                              volume= self.benchmark_algo.volume,
-                              no_of_slices= self.benchmark_algo.no_of_slices,
-                              bucket_placement_func= self.benchmark_algo.bucket_placement_func)
+        self.broker.simulate_algo(self.broker.benchmark_algo)
+        self.broker.rl_algo = RLAlgo(benchmark_algo= self.broker.benchmark_algo,
+                              trade_direction=self.broker.benchmark_algo.trade_direction,
+                              volume= self.broker.benchmark_algo.volume,
+                              no_of_slices= self.broker.benchmark_algo.no_of_slices,
+                              bucket_placement_func= self.broker.benchmark_algo.bucket_placement_func)
 
         # reset the broker with the new benchmark_algo
-        self.broker.reset(self.rl_algo,
+        self.broker.reset(self.broker.rl_algo,
                           start_time=self.broker.benchmark_algo.start_time,
                           end_time=self.broker.benchmark_algo.end_time)
         self.trades_monitor.reset()
@@ -252,6 +252,8 @@ class BaseEnv(gym.Env, ABC):
 
     def build_observation(self):
         # Build observation using the history of order book data
+        # TODO: I need to call the past_lob_snapshots function from the historical data_feed here and use them all to build the observation
+        # TODO: Every time I call this function the datafeed should have to be reset with the timestamp of the according event before this call
         obs = np. array([])
         if self.obs_config['norm']:
             # normalize...
