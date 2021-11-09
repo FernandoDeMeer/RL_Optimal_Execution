@@ -22,7 +22,7 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     ask_prices = [float(asks) for asks in ask_prices]
 
     if norm_price:
-        prices = np.array(bid_prices + ask_prices) / float(norm_price) #have to make sure bid_prices and ask_prices are lists
+        prices = (np.array(bid_prices + ask_prices) / float(norm_price)-1)*100 #have to make sure bid_prices and ask_prices are lists
     else:
         prices = np.array(bid_prices + ask_prices)
 
@@ -92,8 +92,9 @@ class BaseEnv(gym.Env, ABC):
 
         self.mid_price_history = []
 
-        # build observation space
-        self.state = self.build_observation()
+        # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
+
+        self.state = self.build_observation_at_event(event_time = self.broker.benchmark_algo.algo_events[0].strftime('%H:%M:%S'))
         self.reward = 0
         self.done = False
         self.info = {}
@@ -243,33 +244,42 @@ class BaseEnv(gym.Env, ABC):
                                np.array([self.broker.benchmark_algo.volume]),
                                np.array([self.benchmark_algo.no_of_slices])), axis= 0)
 
-        obs_space_n = (n_obs_onesided * 4 + 2)
+        obs_space_n = (n_obs_onesided * 4 + 3)
         assert low.shape[0] == high.shape[0] == obs_space_n
         self.observation_space = gym.spaces.Box(low=low,
                                                 high=high,
                                                 shape=(obs_space_n,),
                                                 dtype=np.float64)
 
-    def build_observation(self):
-        # Build observation using the history of order book data
-        # TODO: I need to call the past_lob_snapshots function from the historical data_feed here and use them all to build the observation
-        # TODO: Every time I call this function the datafeed should have to be reset with the timestamp of the according event before this call
+    def build_observation_at_event(self, event_time):
+        # Build observation using the history of order book data, first reset the data_feed at the event timestamp
+        self.broker.data_feed.reset(time=event_time)
+        # Sample past lobs
+        past_dts, past_lobs = self.broker.data_feed.past_lob_snapshots(no_of_past_lobs=self.obs_config['nr_of_lobs']-1)
+        for dt in past_dts:
+            self.broker.hist_dict['timestamp'].append(dt)
+        for lob in past_lobs:
+            self.broker.hist_dict['rl_lob'].append(lob)
+        # Sample the current lob
+        dt, lob = self.broker.data_feed.next_lob_snapshot()
+        self.broker.hist_dict['timestamp'].append(dt)
+        self.broker.hist_dict['rl_lob'].append(lob)
+
         obs = np. array([])
         if self.obs_config['norm']:
-            # normalize...
-            mid = (self.lob_hist_rl[-1].get_best_ask() +
-                   self.lob_hist_rl[-1].get_best_bid()) / 2
-            vol_bid = self.lob_hist_rl[-1].bids.volume
-            vol_ask = self.lob_hist_rl[-1].asks.volume
-            for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
+            mid = (self.broker.hist_dict['rl_lob'][-1].get_best_ask() +
+                   self.broker.hist_dict['rl_lob'][-1].get_best_bid()) / 2
+            vol_bid = self.broker.hist_dict['rl_lob'][-1].bids.volume
+            vol_ask = self.broker.hist_dict['rl_lob'][-1].asks.volume
+            for lob in self.broker.hist_dict['rl_lob'][-self.obs_config['nr_of_lobs']:]:
+                #TODO: Right now both prices and volumes are normalized, however we show the agent the unnormalized volume, wouldn't it make more sense to not normalize the volume so that it can find the relationship between those quantities?
                 obs = np.concatenate((obs, lob_to_numpy(lob,
                                                    depth=self.obs_config['lob_depth'],
                                                    norm_price=mid,
-                                                   norm_vol_bid=vol_bid,
-                                                   norm_vol_ask=vol_ask)), axis=0)
-            obs = np.concatenate((obs, np.array([self.current_vol_to_trade]),
-                                  np.array([self.qty_remaining/self.vol_to_trade]),
-                                  np.array([self.remaining_steps/self.max_steps])), axis=0)
+                                                   norm_vol_bid=None,
+                                                   norm_vol_ask=None)), axis=0)
+            obs = np.concatenate((obs, np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),#vol left to trade in the bucket
+                                  np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx -1])), axis=0)# orders left to place in the bucket
         else:
             for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
                 obs = np.concatenate(obs, (lob_to_numpy(lob,

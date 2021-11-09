@@ -358,7 +358,7 @@ class RLAlgo(ExecutionAlgo):
         self.date = benchmark_algo.date
         self.execution_times = benchmark_algo.execution_times
         self.buckets = benchmark_algo.buckets
-        self.bucket_volumes = benchmark_algo.algo_events
+        self.bucket_volumes = benchmark_algo.bucket_volumes.copy()
         self.bucket_vol_remaining = benchmark_algo.bucket_volumes.copy()
         self.volumes_per_trade = []
         for bucket in range(len(benchmark_algo.volumes_per_trade)):
