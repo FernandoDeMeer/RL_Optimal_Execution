@@ -11,12 +11,13 @@ def get_time_idx_from_raw_data(data, t):
     """ Returns the index of data right before a given time 't' """
 
     dt = datetime.utcfromtimestamp(data[-1] / 1000)
-    start_t = datetime.strptime(t, '%H:%M:%S')
+    start_t = datetime.strptime(t, '%H:%M:%S') # TODO: We are operating at the second magnitude, maybe once we load all data it makes more sense to include milliseconds)
     start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second)
     unix_t = calendar.timegm(start_dt.utctimetuple()) * 1e3 + start_dt.microsecond / 1e3
     idx = (np.abs(data - unix_t)).argmin()
-    if data[idx] > unix_t:
-        idx = idx - 1
+    # These two lines were giving the lob_snapshot previous to dt, when it should be the one after If we are placing trades (to account for computing time/latency etc)
+    while data[idx] <= unix_t:
+        idx = idx + 1
 
     return idx
 
@@ -103,6 +104,27 @@ class HistoricalDataFeed(DataFeed):
             return timestamp_dt, lob_out
         else:
             return timestamp_dt, lob.reshape(-1, self.lob_depth)
+
+    def past_lob_snapshots(self, no_of_past_lobs, lob_format=True):
+        """ return past snapshots of the limit order book """
+
+        past_lobs = self.data[self.data_row_idx-no_of_past_lobs:self.data_row_idx ]
+        timestamp_dts =[]
+        for lob in past_lobs:
+            timestamp_dts.append(datetime.utcfromtimestamp(lob[0] / 1000))
+
+        output = []
+        if lob_format:
+            for lob in past_lobs:
+                lob_out = raw_to_order_book(current_book=lob[1:].reshape(-1, self.lob_depth),
+                                            time=datetime.utcfromtimestamp(lob[0] / 1000).strftime('%Y-%m-%d %H:%M:%S.%f'),
+                                            depth=self.lob_depth)
+                output.append(lob_out)
+            return timestamp_dts, output
+        else:
+            for lob in past_lobs:
+                output.append(lob.reshape(-1, self.lob_depth))
+            return timestamp_dts, output
 
     def reset(self, time=None, first_time=None, last_time=None):
         """ Reset the datafeed and set from where to start sampling """

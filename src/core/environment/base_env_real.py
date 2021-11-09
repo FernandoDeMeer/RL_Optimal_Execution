@@ -6,7 +6,8 @@ from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
 from src.core.environment.trades_monitor import TradesMonitor
-from src.core.environment.execution_algo_real import ExecutionAlgo
+from src.core.environment.execution_algo_real import ExecutionAlgo,TWAPAlgo,RLAlgo
+from src.core.environment.broker_real import Broker
 from src.ui.user_interface import UIAppWindow, UserInterface
 import time
 import copy
@@ -50,7 +51,8 @@ class BaseEnv(gym.Env, ABC):
             self.ui = None
 
         self.trades_monitor = TradesMonitor(["benchmark", "rl"])
-        self.benchmark_algo = benchmark_algo
+        if benchmark_algo is not None:
+            self.benchmark_algo = benchmark_algo
         self.broker = broker
         self.obs_config = obs_config
         self.reset()
@@ -63,24 +65,29 @@ class BaseEnv(gym.Env, ABC):
         start_time = '{}:{}:{}'.format(random.randint(0,23),
                                        random.randint(0,59),
                                        random.randint(0,59))
+        start_time = str(datetime.strptime(start_time,'%H:%M:%S').time())
         execution_horizon = datetime.strptime('{}:{}:{}'.format(0,
                                                                 random.randint(0,59),
                                                                 random.randint(0,59)),'%H:%M:%S').time() #Set execution horizon within the minute scale
-        self.benchmark_algo = ExecutionAlgo(trade_direction= self.benchmark_algo.trade_direction,  # Train different models for each trade_direction
+        self.broker.benchmark_algo = TWAPAlgo(trade_direction= 1,  # Train different models for each trade_direction
                                             volume= random.randint(500,1000),
                                             no_of_slices= random.randint(3,10),
                                             bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])),
                                             start_time= start_time,
-                                            end_time= str(datetime.strptime(start_time,'%H:%M:%S') + timedelta(hours= execution_horizon.hour,minutes=execution_horizon.minute,seconds=execution_horizon.second)),
+                                            end_time= str((datetime.strptime(start_time,'%H:%M:%S') + timedelta(hours= execution_horizon.hour,minutes=execution_horizon.minute,seconds=execution_horizon.second)).time()),
                                             rand_bucket_bounds_width= random.randint(10, 20)  # % of the bucket_size
                                             )
+        self.broker.simulate_algo(self.broker.benchmark_algo)
+        self.broker.rl_algo = RLAlgo(benchmark_algo= self.broker.benchmark_algo,
+                              trade_direction=self.broker.benchmark_algo.trade_direction,
+                              volume= self.broker.benchmark_algo.volume,
+                              no_of_slices= self.broker.benchmark_algo.no_of_slices,
+                              bucket_placement_func= self.broker.benchmark_algo.bucket_placement_func)
 
         # reset the broker with the new benchmark_algo
-        self.broker.reset(self.benchmark_algo,
+        self.broker.reset(self.broker.rl_algo,
                           start_time=self.broker.benchmark_algo.start_time,
-                          end_time=self.broker.benchmark_algo)
-        # TODO: Find out the max_steps and time here for the current bucket.
-        # self.broker._simulate_to_next_order()
+                          end_time=self.broker.benchmark_algo.end_time)
         self.trades_monitor.reset()
 
         self.mid_price_history = []
@@ -99,9 +106,9 @@ class BaseEnv(gym.Env, ABC):
 
         assert self.done is False, (
             'reset() must be called before step()')
-        # TODO: Here I need to get the current lob_state at the beginning of the bucket and loop updating the self.current_vol_to_trade
+
         event, done = self.broker._simulate_to_next_order()
-        algo_order = self.benchmark_algo.get_order_at_event(event, self.hist_dict['benchmark_lob'][-1])
+        algo_order = self.rl_algo.get_order_at_event(event, self.hist_dict['benchmark_lob'][-1])
         rl_order = algo_order.copy(deep=True)
         rl_order['quantity'] = action[0] * 2 * float(algo_order['quantity'])
         bmk_log, rl_log = self.place_orders(benchmark_order=algo_order, rl_order=rl_order)
@@ -210,12 +217,9 @@ class BaseEnv(gym.Env, ABC):
         Observation Space Config Parameters
 
         nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
-        lob_depth : int, Depth of the LOB to be in each snapshot
+        lob_depth : int, Depth of the LOB to be in each snapshot (max lob_depth = 20 )
         norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
         """
-
-        # TO-DO:
-        # check if data_feed can provide the depth and nr_of_lobs required...
 
         n_obs_onesided = self.obs_config['lob_depth'] * \
                          self.obs_config['nr_of_lobs']
@@ -230,14 +234,14 @@ class BaseEnv(gym.Env, ABC):
                 Inf > asks_volume >= 0,
                 benchmark_algo.volume >= remaining_vol_to_trade >= 0,
                 1 >= current_vol_to_trade_percent >= 0, 
-                max_steps >= remaining_time >= 0
+                max_orders_per_bucket >= remaining_orders >= 0
         """
         low = np.concatenate((zeros, zeros, zeros, zeros, np.array([0]), np.array([0]), np.array([0])), axis=0)
         high = np.concatenate((ones*np.inf, ones*np.inf,
                                ones*np.inf, ones*np.inf,
                                np.array([1]),
                                np.array([self.broker.benchmark_algo.volume]),
-                               np.array([(self.broker.benchmark_algo.start_time-self.broker.benchmark_algo.end_time).seconds])), axis= 0) #TODO: How to get the max_steps now? Go into the data_feed and see how many states are between start_time and end_time but the sampling is not regular now...
+                               np.array([self.benchmark_algo.no_of_slices])), axis= 0)
 
         obs_space_n = (n_obs_onesided * 4 + 2)
         assert low.shape[0] == high.shape[0] == obs_space_n
@@ -248,6 +252,8 @@ class BaseEnv(gym.Env, ABC):
 
     def build_observation(self):
         # Build observation using the history of order book data
+        # TODO: I need to call the past_lob_snapshots function from the historical data_feed here and use them all to build the observation
+        # TODO: Every time I call this function the datafeed should have to be reset with the timestamp of the according event before this call
         obs = np. array([])
         if self.obs_config['norm']:
             # normalize...
@@ -345,5 +351,19 @@ if __name__ == '__main__':
 
     # define the broker class
     broker = Broker(lob_feed, use_for_rl=False)
-    broker.simulate_algo(algo)
-    broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
+    # for i in range(100):
+    #     t = time.time()
+    #     broker.simulate_algo(algo)
+    #     broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
+    #     elapsed = time.time() - t
+    #     print(elapsed)
+
+    # define the obs_config
+    observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 5, 'norm': True}
+    # define action space
+    action_space = gym.spaces.Box(low=0.0,
+                                  high=1.0,
+                                  shape=(1,),
+                                  dtype=np.float32)
+    # define the env
+    base_env = BaseEnv(show_ui=False, benchmark_algo=None, broker=broker,obs_config= observation_space_config, action_space = action_space)

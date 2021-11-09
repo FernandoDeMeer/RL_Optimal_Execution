@@ -69,26 +69,50 @@ class Broker(ABC):
         # get the tick size implied by LOB data
         v = lob.bids.get_price_list(lob.get_best_bid()).volume
         tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
-        self.benchmark_algo.reset(dt.date(), start_time=start_time, end_time=end_time, tick_size=tick)
+        if type(benchmark_algo).__name__ != 'RLAlgo':
+            self.benchmark_algo.reset(dt.date(), start_time=start_time, end_time=end_time, tick_size=tick)
         self._record_lob(dt, lob)
 
     def _simulate_to_next_order(self):
-        """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point """
+        """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
+         remaining orders.
+         """
 
         # get info from the algo about the type and time of next event
         event, done = self.benchmark_algo.get_next_event()
-        if event['type'] == 'bucket_bound':
-            a=0
-        while self.hist_dict['timestamp'][-1] < event['time']:
-            # just update the LOB history if nothing happens
-            dt, lob = self.data_feed.next_lob_snapshot()
-            self._record_lob(dt, lob)
-            if self.hist_dict['timestamp'][-1] < event['time']:
-                order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
 
-                # update the remaining quantities to trade in the benchmark algo
-                self.benchmark_algo.update_remaining_volume(bmk_log)
+        if len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+            # If we have remaining orders go through the LOBs until they are executed
+            while len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+                # Loop through the LOBs
+                dt, lob = self.data_feed.next_lob_snapshot()
+                self._record_lob(dt, lob)
+                if self.hist_dict['timestamp'][-1] < event['time']:
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    bmk_log, _ = self.place_orders(order_temp_bmk, order_temp_rl)
+
+                    # update the remaining quantities to trade in the benchmark algo
+                    self.benchmark_algo.update_remaining_volume(bmk_log)
+                else:
+                    # We have reached the next event with unexecuted volume, if we are not at the end of a bucket
+                    # we add it to the volume of next order
+                    if event['type'] == 'order_placement':
+                        bmk_unexecuted_vol = self.remaining_order['benchmark_algo'][0]['quantity']
+                        # rl_unexecuted_vol = self.remaining_order['rl_algo'][0]['quantity']
+
+                        self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += bmk_unexecuted_vol
+                        # self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += rl_unexecuted_vol
+
+                    # If the event is a bucket end, the market order will be placed according to the bucket_vol_remaining.
+                    # Either way, we remove the remaining orders.
+                    self.remaining_order['benchmark_algo'] = []
+                    self.remaining_order['rl_algo'] = []
+
+        # If we have no remaining orders (for example after executing an entire limit order or after a bucket end),
+        # we reset the datafeed to jump to the LOB corresponding to the next event.
+        self.data_feed.reset(time='{}:{}:{}'.format(event['time'].hour,event['time'].minute,event['time'].second))
+        dt, lob = self.data_feed.next_lob_snapshot()
+        self._record_lob(dt, lob)
 
         return event, done
 
@@ -114,7 +138,7 @@ class Broker(ABC):
             if order_temp_bmk['type'] == 'limit':
                 # update the price also
                 if order_temp_bmk['side'] == 'bid' and order_temp_bmk['price'] < lob_bmk.get_best_bid():
-                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size # Don't orders not previously executed already have a set price? This updates their price on every new lob
+                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
                 if order_temp_bmk['side'] == 'ask' and order_temp_bmk['price'] > lob_bmk.get_best_ask():
                     order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size()
             self.remaining_order['benchmark_algo'] = []
@@ -206,8 +230,8 @@ if __name__ == '__main__':
                     bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
-    # dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
-    dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
+    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    # dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',
                                   samples_per_file=200)
@@ -221,15 +245,12 @@ if __name__ == '__main__':
     # ToDo:
     # Debugging:
     #   hist_dict has gaps when trades at events are placed!
-
-
-    #   * cancel remaining orders upon bucket end
+    #   * cancel remaining orders upon bucket end -- DONE (lines 157-18 175-176)
     #   * possibly introduce a max depth to be able to trade in the order book
-    #   * too slow, no need to loop through the entire thing if no trades remaining!!
+    #   * too slow, no need to loop through the entire thing if no trades remaining!! -- DONE (func _update_remaining_orders)
     #   * Bugs: plot: fix time axis
-    #   * discuss with others how to make this faster
     #   * migrate this into a new env
-    #   * implement an initialisation class that draws randomly from starting points
+    #   * implement an initialisation class that draws randomly from starting points -- Now done in the BaseEnv, maybe make it a function of the ExecutionAlgo base class?
 
 
 
