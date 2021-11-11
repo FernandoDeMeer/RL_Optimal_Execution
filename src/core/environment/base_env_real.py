@@ -5,7 +5,6 @@ from datetime import datetime,timedelta
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
-from src.core.environment.trades_monitor import TradesMonitor
 from src.core.environment.execution_algo_real import ExecutionAlgo,TWAPAlgo,RLAlgo
 from src.core.environment.broker_real import Broker
 from src.ui.user_interface import UIAppWindow, UserInterface
@@ -39,7 +38,6 @@ class BaseEnv(gym.Env, ABC):
 
     def __init__(self,
                  show_ui,
-                 benchmark_algo,
                  broker,
                  obs_config,
                  action_space,
@@ -50,9 +48,6 @@ class BaseEnv(gym.Env, ABC):
         else:
             self.ui = None
 
-        self.trades_monitor = TradesMonitor(["benchmark", "rl"])
-        if benchmark_algo is not None:
-            self.benchmark_algo = benchmark_algo
         self.broker = broker
         self.obs_config = obs_config
         self.reset()
@@ -75,20 +70,21 @@ class BaseEnv(gym.Env, ABC):
                                             bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])),
                                             start_time= start_time,
                                             end_time= str((datetime.strptime(start_time,'%H:%M:%S') + timedelta(hours= execution_horizon.hour,minutes=execution_horizon.minute,seconds=execution_horizon.second)).time()),
-                                            rand_bucket_bounds_width= random.randint(10, 20)  # % of the bucket_size
-                                            )
-        self.broker.simulate_algo(self.broker.benchmark_algo)
-        self.broker.rl_algo = RLAlgo(benchmark_algo= self.broker.benchmark_algo,
-                              trade_direction=self.broker.benchmark_algo.trade_direction,
-                              volume= self.broker.benchmark_algo.volume,
-                              no_of_slices= self.broker.benchmark_algo.no_of_slices,
-                              bucket_placement_func= self.broker.benchmark_algo.bucket_placement_func)
-
+                                            rand_bucket_bounds_width= random.randint(10, 20),  # % of the bucket_size
+                                            broker_data_feed= self.broker.data_feed)
         # reset the broker with the new benchmark_algo
-        self.broker.reset(self.broker.rl_algo,
-                          start_time=self.broker.benchmark_algo.start_time,
-                          end_time=self.broker.benchmark_algo.end_time)
-        self.trades_monitor.reset()
+
+        self.broker.reset(self.broker.benchmark_algo,)
+
+        # simulate the benchmark algo and declare the RLAlgo
+        self.broker.simulate_algo(self.broker.benchmark_algo)
+
+        self.broker.rl_algo = RLAlgo(benchmark_algo= self.broker.benchmark_algo,
+                                 trade_direction=self.broker.benchmark_algo.trade_direction,
+                                 volume= self.broker.benchmark_algo.volume,
+                                 no_of_slices= self.broker.benchmark_algo.no_of_slices,
+                                 bucket_placement_func= self.broker.benchmark_algo.bucket_placement_func,
+                                 broker_data_feed=self.broker.data_feed)
 
         self.mid_price_history = []
 
@@ -108,67 +104,24 @@ class BaseEnv(gym.Env, ABC):
         assert self.done is False, (
             'reset() must be called before step()')
 
-        event, done = self.broker._simulate_to_next_order()
-        algo_order = self.rl_algo.get_order_at_event(event, self.hist_dict['benchmark_lob'][-1])
-        rl_order = algo_order.copy(deep=True)
-        rl_order['quantity'] = action[0] * 2 * float(algo_order['quantity'])
-        bmk_log, rl_log = self.place_orders(benchmark_order=algo_order, rl_order=rl_order)
+        event, done = self.broker._simulate_to_next_order(self.broker.rl_algo)
+
+        #Update the volume the RLAlgo has chosen for the order
+        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx].quantize(Decimal('1.0'))
+        algo_order = self.broker.rl_algo.get_order_at_event(event, self.broker.hist_dict['rl_lob'][-1])
+
+        rl_order = algo_order.copy()
+        log = self.broker.place_orders(rl_order, type(self.broker.rl_algo).__name__)
 
         # update the remaining quantities to trade
-        if bmk_log is not None and bmk_log['quantity'] > 0:
-            self.benchmark_algo.update_remaining_volume(bmk_log['quantity'])
-        if rl_log is not None and rl_log['quantity'] > 0:
-            self.benchmark_algo.update_remaining_volume(bmk_log['quantity'])
+        if log['quantity'] > 0:
+            self.rl_algo.update_remaining_volume(log)
 
-
-        self.time += 1
-        self.remaining_steps -= 1
-        place_order_bmk = self.benchmark_algo.get_order_at_time(self.time)
-
-        """
-        if self.time >= self.max_steps-1:
-            # We are at the end of the episode so we have to trade all our remaining inventory
-            place_order_rl = {'type': 'market',
-                              'timestamp': self.time,
-                              'side': 'bid' if self.trade_direction == 1 else 'ask',
-                              'quantity': Decimal(str(self.qty_remaining)),
-                              'trade_id': 1}
-        else:
-        """
-        # Otherwise we trade according to the agent's action, which is a percentage of 2*TWAP
-        if action[0]*2*float(place_order_bmk['quantity']) < self.qty_remaining:
-            place_order_rl = {'type': 'market',
-                              'timestamp': self.time,
-                              'side': 'bid' if self.trade_direction == 1 else 'ask',
-                              'quantity': Decimal(str(action[0]*2*float(place_order_bmk['quantity']))),
-                              'trade_id': 1}
-        else:
-            place_order_rl = {'type': 'market',
-                              'timestamp': self.time,
-                              'side': 'bid' if self.trade_direction == 1 else 'ask',
-                              'quantity': Decimal(str(self.qty_remaining)),
-                              'trade_id': 1}
-
-        self.last_bmk_order = place_order_bmk
-        self.last_rl_order = place_order_rl
-
-        # place order in LOB and replace LOB history with current trade
-        # since historic data can be incorporated into observations, "simulated" LOB's deviate from each other
-        bmk_trade_dict = self.broker.place_order(self.lob_hist_bmk[-1], place_order_bmk)
-        rl_trade_dict = self.broker.place_order(self.lob_hist_rl[-1], place_order_rl)
-
-        self.mid_price_history.append(float(bmk_trade_dict["mid"]))
-
-        # Update the trades monitor
-        self._record_step(bmk_trade_dict, rl_trade_dict)
-        self.benchmark_qty_remaining_history.append(self.benchmark_qty_remaining_history[-1] - bmk_trade_dict['qty'])
-
-        self.qty_remaining = self.qty_remaining - rl_trade_dict['qty']
-        self.rl_qty_remaining_history.append(self.qty_remaining)
-
-        # incorporate sparse reward for now...
-        self.calc_reward(action)
-        if self.time >= self.max_steps-1:
+        # TODO: Calling here for testing, remove later 
+        self.calc_reward()
+        # Calculate rewards, if we are at the end of an episode
+        if self.broker.rl_algo.order_idx >= len(self.broker.rl_algo.algo_events):
+            self.calc_reward()
             self.done = True
             self.state = []
         else:
@@ -234,17 +187,15 @@ class BaseEnv(gym.Env, ABC):
                 Inf > bids_volume >= 0,
                 Inf > asks_volume >= 0,
                 benchmark_algo.volume >= remaining_vol_to_trade >= 0,
-                1 >= current_vol_to_trade_percent >= 0, 
-                max_orders_per_bucket >= remaining_orders >= 0
+                no_of_slices >= remaining_orders >= 0
         """
-        low = np.concatenate((zeros, zeros, zeros, zeros, np.array([0]), np.array([0]), np.array([0])), axis=0)
+        low = np.concatenate((zeros, zeros, zeros, zeros, np.array([0]), np.array([0])), axis=0)
         high = np.concatenate((ones*np.inf, ones*np.inf,
                                ones*np.inf, ones*np.inf,
-                               np.array([1]),
                                np.array([self.broker.benchmark_algo.volume]),
-                               np.array([self.benchmark_algo.no_of_slices])), axis= 0)
+                               np.array([self.broker.benchmark_algo.no_of_slices])), axis= 0)
 
-        obs_space_n = (n_obs_onesided * 4 + 3)
+        obs_space_n = (n_obs_onesided * 4 + 2)
         assert low.shape[0] == high.shape[0] == obs_space_n
         self.observation_space = gym.spaces.Box(low=low,
                                                 high=high,
@@ -296,46 +247,10 @@ class BaseEnv(gym.Env, ABC):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def calc_reward(self,action):
-        if self.time >= self.max_steps-1:
-            vwaps = self.trades_monitor.calc_vwaps()
-            if (vwaps['rl'] - vwaps['benchmark']) * self.trade_direction < 0:
-                self.reward += 1/self.broker.benchmark_algo.buckets.n_buckets # Need to normalize the reward by the number of buckets now
-            # if self.qty_remaining > 0:
-            #     self.reward -= 2
-            # IS = self.trades_monitor.calc_IS()
-            # if (IS['rl'] - IS['benchmark']) * self.trade_direction < 0:
-            #     self.reward += -1
-            # elif (IS['rl'] - 1.1*IS['benchmark']) * self.trade_direction > 0:
-            #     self.reward += 1
-
-        # apply a quadratic penalty if the trading volume exceeds the available volumes of the top 5 bids
-        if self.trade_direction == 1:
-            # We are buying, so we look at the asks
-            ask_items = self.lob_hist_rl[-1].asks.order_map.items()
-            available_volume = np.sum([float(asks[1].quantity) for asks in list(ask_items)[:5]])
-        else:
-            # We are selling, so we look at the bids
-            bid_items = self.lob_hist_rl[-1].bids.order_map.items()
-            available_volume = np.sum([float(bids[1].quantity) for bids in list(bid_items)[-5:]])
-
-        action_volume = action[0]*2*float(self.last_bmk_order['quantity'])
-        if available_volume < action_volume:
-            self.reward -= np.square(available_volume-action_volume)
-
-    def _record_step(self, bmk, rl):
-
-        # update the volume of the benchmark algo
-        self.benchmark_algo.update_remaining_volume(bmk['qty']) # this is odd to do here...
-
-        # update the trades monitor
-        self.trades_monitor.record_step(algo_id="benchmark", key_name="pxs", value=bmk['pxs'])
-        self.trades_monitor.record_step(algo_id="benchmark", key_name="qty", value=bmk['qty'])
-        self.trades_monitor.record_step(algo_id="benchmark", key_name="arrival", value=bmk['mid'])
-
-        self.trades_monitor.record_step(algo_id="rl", key_name="pxs", value=rl['pxs'])
-        self.trades_monitor.record_step(algo_id="rl", key_name="qty", value=rl['qty'])
-        self.trades_monitor.record_step(algo_id="rl", key_name="arrival", value=rl['mid'])
+    def calc_reward(self,):
+        bmk_vwap, rl_vwap = self.broker.calc_vwaps()
+        if (rl_vwap - bmk_vwap) * self.broker.rl_algo.trade_direction < 0:
+            self.reward += 1
 
 
 if __name__ == '__main__':
@@ -345,13 +260,6 @@ if __name__ == '__main__':
     from src.core.environment.execution_algo_real import TWAPAlgo
     from src.data.historical_data_feed import HistoricalDataFeed
 
-    # define the benchmark algo
-    algo = TWAPAlgo(trade_direction=1,
-                    volume=500,
-                    start_time='08:35:05',
-                    end_time='09:00:00',
-                    no_of_slices=3,
-                    bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
     dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
@@ -360,7 +268,8 @@ if __name__ == '__main__':
                                   samples_per_file=200)
 
     # define the broker class
-    broker = Broker(lob_feed, use_for_rl=False)
+    broker = Broker(lob_feed)
+
     # for i in range(100):
     #     t = time.time()
     #     broker.simulate_algo(algo)
@@ -376,4 +285,5 @@ if __name__ == '__main__':
                                   shape=(1,),
                                   dtype=np.float32)
     # define the env
-    base_env = BaseEnv(show_ui=False, benchmark_algo=None, broker=broker,obs_config= observation_space_config, action_space = action_space)
+    base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
+    base_env.step(action = np.array([0.56]))

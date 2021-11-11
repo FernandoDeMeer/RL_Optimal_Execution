@@ -1,10 +1,11 @@
 import math
+import copy
 import numpy as np
 from datetime import datetime, timedelta
 from decimal import Decimal
 from random import randint
 import random
-# random.seed(a=2)
+random.seed(a=2)
 
 
 BUCKET_SIZES_IN_SECS = {"1m": 7,
@@ -121,10 +122,11 @@ class ExecutionAlgo:
                  volume,
                  no_of_slices,
                  bucket_placement_func,
+                 broker_data_feed,
                  start_time=None,
                  end_time=None,
                  rand_bucket_bounds_width=None,
-                 tick_size=None):
+                 ):
 
         # Raw inputs
         self.trade_direction = trade_direction
@@ -133,43 +135,15 @@ class ExecutionAlgo:
         self.end_time = end_time
         self.no_of_slices = no_of_slices
         self.bucket_placement_func = bucket_placement_func
-        self.tick_size = tick_size
-        if tick_size is not None:
-            self.tick_size = Decimal(str(tick_size))
         self.rand_bucket_bounds_width = rand_bucket_bounds_width
+        self.broker_data_feed = broker_data_feed
 
-    def reset(self, date, start_time=None, end_time=None, tick_size=None):
 
-        if start_time is not None and end_time is not None:
-            self.start_time = start_time
-            self.end_time = end_time
-        if self.start_time is None or self.end_time is None:
-            raise ValueError('Both start_time and end_time need to be defined!!')
-
-        if tick_size is not None:
-            self.tick_size = tick_size
-
-        # Derive trading schedules
-        self.date = date
-        start_time = datetime.combine(date, datetime.strptime(self.start_time, '%H:%M:%S').time())
-        end_time = datetime.combine(date, datetime.strptime(self.end_time, '%H:%M:%S').time())
-        self.buckets = Bucket(start_time, end_time, self.rand_bucket_bounds_width)
-
-        # split volume across buckets and check if this worked
-        self._split_volume_across_buckets()
-        if abs(np.sum(self.bucket_volumes) - self.volume) > self.tick_size/10:
-            raise ValueError("Volumes split across buckets didn't work out!")
-
-        # get execution times and split volume across orders/check
-        self._sample_execution_times()
-        self._split_volume_within_buckets()
-        if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size/10:
-            raise ValueError("Volumes split across orders didn't work out!")
+    def reset(self,):
 
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()
-        self.current_time = self.start_time
         self.event_idx = 0
         self.order_idx = 0
         self.bucket_idx = 0
@@ -242,18 +216,16 @@ class ExecutionAlgo:
         if self.order_idx / self.no_of_slices >= 1:
             self.order_idx = 0
 
-        order_out = None
         if order['quantity'] > 0:
             self.placed_orders.append(order)
-            order_out = order
-        return order_out
+        return order
 
     def update_remaining_volume(self, trade_log, event_type=None):
         if trade_log is not None and trade_log['quantity'] > 0:
             self.vol_remaining -= Decimal(str(trade_log['quantity']))
             self.bucket_vol_remaining[self.bucket_idx] -= Decimal(str(trade_log['quantity']))
 
-        if self.vol_remaining < 0 or self.bucket_vol_remaining[self.bucket_idx] < 0:
+        if self.vol_remaining < -self.tick_size or self.bucket_vol_remaining[self.bucket_idx] < -self.tick_size:
             raise ValueError("More volume than available placed!")
 
         if event_type is not None and event_type == 'bucket_bound':
@@ -320,8 +292,32 @@ class ExecutionAlgo:
 class TWAPAlgo(ExecutionAlgo):
     """ Implementation of a TWAP Execution Algo based on the base algo logic """
 
+
     def __init__(self, *args, **kwargs):
         super(TWAPAlgo, self).__init__(*args, **kwargs)
+        # get the tick size implied by LOB data_feed
+        self.broker_data_feed.reset(time=self.start_time)
+        dt, lob = self.broker_data_feed.next_lob_snapshot()
+        v = lob.bids.get_price_list(lob.get_best_bid()).volume
+        tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
+        self.tick_size = tick
+
+        # Derive trading schedules
+        start_time = datetime.combine(dt.date(), datetime.strptime(self.start_time, '%H:%M:%S').time())
+        end_time = datetime.combine(dt.date(), datetime.strptime(self.end_time, '%H:%M:%S').time())
+        self.buckets = Bucket(start_time, end_time, self.rand_bucket_bounds_width)
+
+        # split volume across buckets and check if this worked
+        self._split_volume_across_buckets()
+        if abs(np.sum(self.bucket_volumes) - self.volume) > self.tick_size:
+            raise ValueError("Volumes split across buckets didn't work out!")
+
+        # get execution times and split volume across orders/check
+        self._sample_execution_times()
+        self._split_volume_within_buckets()
+        if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
+            raise ValueError("Volumes split across orders didn't work out!")
+
 
     def _split_volume_across_buckets(self):
         """ Aims to split volume across buckets as equal as possible """
@@ -348,6 +344,7 @@ class TWAPAlgo(ExecutionAlgo):
             split_vols.append(vols_per_trade)
 
         self.volumes_per_trade = split_vols
+        self.volumes_per_trade_default = copy.deepcopy(split_vols)
 
 class RLAlgo(ExecutionAlgo):
     """ Implementation of a RL Execution Algo class to use with the Broker """
@@ -355,19 +352,20 @@ class RLAlgo(ExecutionAlgo):
     def __init__(self, benchmark_algo, *args, **kwargs):
         super(RLAlgo, self).__init__(*args, **kwargs)
         self.algo_events = benchmark_algo.algo_events
-        self.date = benchmark_algo.date
+        self.start_time = benchmark_algo.start_time
+        self.end_time = benchmark_algo.end_time
         self.execution_times = benchmark_algo.execution_times
+        self.tick_size = benchmark_algo.tick_size
         self.buckets = benchmark_algo.buckets
         self.bucket_volumes = benchmark_algo.bucket_volumes.copy()
         self.bucket_vol_remaining = benchmark_algo.bucket_volumes.copy()
         self.volumes_per_trade = []
         for bucket in range(len(benchmark_algo.volumes_per_trade)):
-            self.volumes_per_trade.append(list([Decimal(0) for order_event in benchmark_algo.volumes_per_trade[bucket]]))
+            self.volumes_per_trade.append(list([Decimal(0) for order_event in benchmark_algo.volumes_per_trade_default[bucket]]))
 
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()
-        self.current_time = self.start_time
         self.event_idx = 0
         self.order_idx = 0
         self.bucket_idx = 0

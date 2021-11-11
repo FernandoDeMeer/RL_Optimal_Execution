@@ -1,4 +1,5 @@
 import random
+import copy
 import calendar
 import numpy as np
 from os import listdir, path
@@ -90,7 +91,7 @@ class HistoricalDataFeed(DataFeed):
         if self._remaining_rows_in_file <= 0:
             self.reset(self.time, self.first_time, self.last_time)
 
-        lob = self.data[self.data_row_idx]
+        lob = copy.deepcopy(self.data[self.data_row_idx])
 
         self.data_row_idx += 1
         self._remaining_rows_in_file -= 1
