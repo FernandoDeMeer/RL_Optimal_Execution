@@ -117,8 +117,6 @@ class BaseEnv(gym.Env, ABC):
         if log['quantity'] > 0:
             self.rl_algo.update_remaining_volume(log)
 
-        # TODO: Calling here for testing, remove later 
-        self.calc_reward()
         # Calculate rewards, if we are at the end of an episode
         if self.broker.rl_algo.order_idx >= len(self.broker.rl_algo.algo_events):
             self.calc_reward()
