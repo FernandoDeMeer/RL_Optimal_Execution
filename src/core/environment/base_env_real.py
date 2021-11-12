@@ -125,10 +125,8 @@ class BaseEnv(gym.Env, ABC):
             self.done = True
             self.state = []
         else:
-            _, lob_next = self.data_feed.next_lob_snapshot()
-            self.lob_hist_bmk.append(lob_next)
-            self.lob_hist_rl.append(lob_next)
-            self.state = self.build_observation()
+            # Go to the next event otherwise
+            self.state = self.build_observation_at_event(event_time = self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
 
         self.info = {}
         return self.state, self.reward, self.done, self.info
@@ -232,10 +230,11 @@ class BaseEnv(gym.Env, ABC):
             obs = np.concatenate((obs, np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),#vol left to trade in the bucket
                                   np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx -1])), axis=0)# orders left to place in the bucket
         else:
-            for lob in self.lob_hist_rl[-self.obs_config['nr_of_lobs']:]:
+            for lob in self.broker.hist_dict['rl_lob'][-self.obs_config['nr_of_lobs']:]:
                 obs = np.concatenate(obs, (lob_to_numpy(lob,
                                                         depth=self.obs_config['lob_depth'])), axis=0)
-            obs = np.concatenate((obs, np.array([self.qty_remaining]), np.array([self.remaining_steps])), axis=0)
+            obs = np.concatenate((obs, np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),#vol left to trade in the bucket
+                                  np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx -1])), axis=0)# orders left to place in the bucket
 
         # need to make sure that obs fits to the observation space...
         # 0 padding whenever this gets smaller...
@@ -286,4 +285,5 @@ if __name__ == '__main__':
                                   dtype=np.float32)
     # define the env
     base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
-    base_env.step(action = np.array([0.56]))
+    for i in range(len(base_env.broker.rl_algo.algo_events)):
+        base_env.step(action = np.array([0.5]))

@@ -362,6 +362,7 @@ class RLAlgo(ExecutionAlgo):
         self.volumes_per_trade = []
         for bucket in range(len(benchmark_algo.volumes_per_trade)):
             self.volumes_per_trade.append(list([Decimal(0) for order_event in benchmark_algo.volumes_per_trade_default[bucket]]))
+        self.volumes_per_trade_default = benchmark_algo.volumes_per_trade_default
 
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []

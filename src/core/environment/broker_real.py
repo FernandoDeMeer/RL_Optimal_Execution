@@ -191,12 +191,15 @@ class Broker(ABC):
                 self.remaining_order['benchmark_algo'] = []
 
         if algo_type == 'RLAlgo':
-
-            log = place_order(copy.deepcopy(self.hist_dict['rl_lob'][-1]),
+            input_lob = copy.deepcopy(self.hist_dict['rl_lob'][-1])
+            log = place_order(input_lob,
                                  self.hist_dict['timestamp'][-1],
                                  order)
             if log is not None:
                 self.trade_logs['rl_algo'].append(log)
+                # TODO: Different lobs are being sampled between the benchmark algo and the rl_algo during simulation, I need to find out why
+                if log != self.trade_logs['benchmark_algo'][self.rl_algo.event_idx-1]:
+                    a = 0
                 rl_order_temp = order.copy()
                 rl_order_temp['quantity'] -= log['quantity']
                 if rl_order_temp['quantity'] > 0:
@@ -222,7 +225,7 @@ class Broker(ABC):
             algo.update_remaining_volume(log, event['type'])
 
     def calc_vwaps(self):
-        self.rl_algo.volumes_per_trade = self.benchmark_algo.volumes_per_trade_default
+        self.rl_algo.volumes_per_trade = copy.deepcopy(self.rl_algo.volumes_per_trade_default)
         self.simulate_algo(self.rl_algo) # TODO: Can't figure out why same algo_events+volumes_per_order yields different size of the trade logs...
         bmk_vwap = 0
         for bmk_trade in self.trade_logs['benchmark_algo']:

@@ -150,8 +150,8 @@ class HistoricalDataFeed(DataFeed):
             self.binary_file_idx = 0
 
         # load new data from file if required
-        if self.binary_file_idx_prev != self.binary_file_idx or self.data is None:
-            self._load_data()
+        # if self.binary_file_idx_prev != self.binary_file_idx or self.data is None:
+        self._load_data()
 
         # select data based on actual dates
         self._select_row_idx()
