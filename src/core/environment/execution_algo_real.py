@@ -195,7 +195,7 @@ class ExecutionAlgo:
             if side == 'bid':
                 p = lob.get_best_bid() - self.tick_size
             else:
-                p = lob.get_best_ask + self.tick_size
+                p = lob.get_best_ask() + self.tick_size
             order = {'type': 'limit',
                      'timestamp': datetime.strftime(event['time'], '%Y-%m-%d %H:%M:%S.%f'),
                      'side': side,
