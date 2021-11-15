@@ -260,7 +260,7 @@ if __name__ == '__main__':
 
 
     # define the datafeed
-    dir = '/'
+    dir = '../../../'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',
                                   samples_per_file=200)
