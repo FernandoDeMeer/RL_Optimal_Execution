@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from random import randint
 import random
-random.seed(a=2)
 
 
 BUCKET_SIZES_IN_SECS = {"1m": 7,
