@@ -3,16 +3,14 @@ import pprint
 import argparse
 import os
 import ray
-from ray import tune
 import gym
 import numpy as np
 from ray.tune.registry import register_env
 from src.core.agent.ray_model import RNNModel
 from ray.rllib.models import ModelCatalog
-from ray.rllib.utils.test_utils import check_learning_achieved
-from src.core.environment.base_env import BaseEnv
+from src.core.environment.market_orders_setup.base_env import BaseEnv
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.execution_algo import TWAPAlgo
+from src.core.environment.market_orders_setup.execution_algo import TWAPAlgo
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))

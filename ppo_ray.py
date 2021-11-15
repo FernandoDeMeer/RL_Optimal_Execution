@@ -3,16 +3,14 @@ import shutil
 import pprint
 
 import ray
-from ray import tune
 
 import gym
 import numpy as np
 
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.execution_algo import TWAPAlgo
-from src.core.environment.base_env import BaseEnv
+from src.core.environment.market_orders_setup.execution_algo import TWAPAlgo
+from src.core.environment.market_orders_setup.base_env import BaseEnv
 from src.core.agent.ray_policy import get_policy_config
-from ray.rllib.models import ModelCatalog
 from ray.rllib.agents import ppo
 from ray.rllib.agents.ppo import PPOTrainer
 

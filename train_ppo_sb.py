@@ -8,16 +8,14 @@ import tensorflow as tf
 
 from stable_baselines import PPO2
 from stable_baselines.bench.monitor import Monitor
-from stable_baselines.common.vec_env import SubprocVecEnv, DummyVecEnv
-from stable_baselines.common.tf_layers import linear, lstm
+from stable_baselines.common.vec_env import SubprocVecEnv
 from stable_baselines.common.callbacks import BaseCallback
 from stable_baselines.common.callbacks import CheckpointCallback
-from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
-from stable_baselines.common.policies import LstmPolicy, RecurrentActorCriticPolicy
+from stable_baselines.common.policies import LstmPolicy
 
-from src.core.environment.base_env import BaseEnv
+from src.core.environment.market_orders_setup.base_env import BaseEnv
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.execution_algo import TWAPAlgo
+from src.core.environment.market_orders_setup.execution_algo import TWAPAlgo
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -245,7 +245,7 @@ if __name__ == '__main__':
 
     import random
     import os
-    from src.core.environment.execution_algo_real import TWAPAlgo
+    from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
     from src.data.historical_data_feed import HistoricalDataFeed
 
     # define the benchmark algo
@@ -257,7 +257,7 @@ if __name__ == '__main__':
                     bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
 
     # define the datafeed
-    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    dir = '/'
     # dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',

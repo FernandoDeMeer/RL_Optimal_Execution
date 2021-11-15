@@ -3,10 +3,10 @@ import random
 import numpy as np
 from gym.utils import seeding
 from decimal import Decimal
-from abc import ABC, abstractmethod
+from abc import ABC
 from src.core.environment.trades_monitor import TradesMonitor
-from src.core.environment.broker import Broker
-from src.ui.user_interface import UIAppWindow, UserInterface, EnvController
+from src.core.environment.market_orders_setup.broker import Broker
+from src.ui.user_interface import UIAppWindow, UserInterface
 import time
 import copy
 

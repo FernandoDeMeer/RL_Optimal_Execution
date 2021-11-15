@@ -1,12 +1,11 @@
 import gym
-import random
 import numpy as np
 from datetime import datetime,timedelta
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
-from src.core.environment.execution_algo_real import ExecutionAlgo,TWAPAlgo,RLAlgo
-from src.core.environment.broker_real import Broker
+from src.core.environment.limit_orders_setup.execution_algo_real import RLAlgo
+from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.ui.user_interface import UIAppWindow, UserInterface
 import time
 import copy
@@ -256,12 +255,12 @@ if __name__ == '__main__':
 
     import random
     import os
-    from src.core.environment.execution_algo_real import TWAPAlgo
+    from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
     from src.data.historical_data_feed import HistoricalDataFeed
 
 
     # define the datafeed
-    dir = 'C:\\Users\\demp\\Documents\\Repos\\RLOptimalTradeExecution'
+    dir = '/'
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
                                   instrument='btc_usdt',
                                   samples_per_file=200)

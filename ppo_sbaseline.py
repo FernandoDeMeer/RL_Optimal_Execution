@@ -4,11 +4,11 @@ import os
 import numpy as np
 import tensorflow as tf
 from stable_baselines import PPO2
-from src.core.environment.execution_algo import TWAPAlgo
-from src.core.environment.base_env import BaseEnv
+from src.core.environment.market_orders_setup.execution_algo import TWAPAlgo
+from src.core.environment.market_orders_setup.base_env import BaseEnv
 from src.data.historical_data_feed import HistoricalDataFeed
 from stable_baselines.common.policies import LstmPolicy, RecurrentActorCriticPolicy
-from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 from stable_baselines.common.tf_layers import linear, lstm
 from stable_baselines.common import set_global_seeds
