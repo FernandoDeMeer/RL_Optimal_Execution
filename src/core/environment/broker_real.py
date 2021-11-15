@@ -197,8 +197,6 @@ class Broker(ABC):
                                  order)
             if log is not None:
                 self.trade_logs['rl_algo'].append(log)
-                if log != self.trade_logs['benchmark_algo'][self.rl_algo.event_idx-1]:
-                    a = 0
                 rl_order_temp = order.copy()
                 rl_order_temp['quantity'] -= log['quantity']
                 if rl_order_temp['quantity'] > 0:
@@ -228,12 +226,13 @@ class Broker(ABC):
 
     def calc_vwaps(self):
         self.simulate_algo(self.rl_algo)
+
         bmk_vwap = 0
         for bmk_trade in self.trade_logs['benchmark_algo']:
             if bmk_trade['message'] == 'trade':
                 bmk_vwap += bmk_trade['quantity']*Decimal(bmk_trade['price'])
-                print(bmk_trade['price'])
         bmk_vwap = bmk_vwap/self.rl_algo.volume
+
         rl_vwap = 0
         for rl_trade in self.trade_logs['rl_algo']:
             if rl_trade['message'] == 'trade':

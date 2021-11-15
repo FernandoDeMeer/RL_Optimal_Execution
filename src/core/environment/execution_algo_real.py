@@ -140,7 +140,6 @@ class ExecutionAlgo:
 
 
     def reset(self,):
-        self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()

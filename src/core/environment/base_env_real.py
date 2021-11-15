@@ -104,21 +104,23 @@ class BaseEnv(gym.Env, ABC):
         assert self.done is False, (
             'reset() must be called before step()')
 
-        event, done = self.broker._simulate_to_next_order(self.broker.rl_algo)
+        self.broker.rl_algo.event_idx += 1
 
         #Update the volume the RLAlgo has chosen for the order
-        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx].quantize(Decimal('1.0'))
-        algo_order = self.broker.rl_algo.get_order_at_event(event, self.broker.hist_dict['rl_lob'][-1])
+        vol_to_trade = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx].quantize(Decimal('1.0'))
+        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = vol_to_trade
+        self.broker.rl_algo.order_idx += 1
 
-        rl_order = algo_order.copy()
-        log = self.broker.place_orders(rl_order, type(self.broker.rl_algo).__name__)
+        # update the remaining bucket vol
+        self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx] -= vol_to_trade
 
-        # update the remaining quantities to trade
-        if log['quantity'] > 0:
-            self.rl_algo.update_remaining_volume(log)
+        if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 0:
+            self.broker.rl_algo.bucket_idx += 1
+            self.broker.rl_algo.order_idx = 0
 
-        # Calculate rewards, if we are at the end of an episode
-        if self.broker.rl_algo.order_idx >= len(self.broker.rl_algo.algo_events):
+
+    # Calculate rewards, if we are at the end of an episode
+        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
             self.calc_reward()
             self.done = True
             self.state = []
@@ -283,5 +285,7 @@ if __name__ == '__main__':
                                   dtype=np.float32)
     # define the env
     base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
-    for i in range(len(base_env.broker.rl_algo.algo_events)):
+    for i in range(len(base_env.broker.rl_algo.algo_events) + 1):
         base_env.step(action = np.array([0.5]))
+        if base_env.done == True:
+            base_env.reset()
