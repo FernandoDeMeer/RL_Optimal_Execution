@@ -56,12 +56,12 @@ class BaseEnv(gym.Env, ABC):
 
     def reset(self):
         # Randomize the volume, no_of_slices, start_time, end_time and rand_bucket_bounds of self.benchmark_algo
-        start_time = '{}:{}:{}'.format(random.randint(0,23),
+        start_time = '{}:{}:{}'.format(random.randint(0,22),
                                        random.randint(0,59),
                                        random.randint(0,59))
         start_time = str(datetime.strptime(start_time,'%H:%M:%S').time())
         execution_horizon = datetime.strptime('{}:{}:{}'.format(0,
-                                                                random.randint(0,59),
+                                                                random.randint(1,59),
                                                                 random.randint(0,59)),'%H:%M:%S').time() #Set execution horizon within the minute scale
         self.broker.benchmark_algo = TWAPAlgo(trade_direction= 1,  # Train different models for each trade_direction
                                             volume= random.randint(500,1000),
@@ -257,34 +257,36 @@ if __name__ == '__main__':
     import os
     from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
     from src.data.historical_data_feed import HistoricalDataFeed
+    for i in range(1000):
+        seed = random.randint(0,100000)
+        random.seed(a= 59898)
+        print(seed)
+        # define the datafeed
+        dir = '../../../'
+        lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
+                                      instrument='btc_usdt',
+                                      samples_per_file=200)
 
+        # define the broker class
+        broker = Broker(lob_feed)
 
-    # define the datafeed
-    dir = '../../../'
-    lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
+        # for i in range(100):
+        #     t = time.time()
+        #     broker.simulate_algo(algo)
+        #     broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
+        #     elapsed = time.time() - t
+        #     print(elapsed)
 
-    # define the broker class
-    broker = Broker(lob_feed)
-
-    # for i in range(100):
-    #     t = time.time()
-    #     broker.simulate_algo(algo)
-    #     broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
-    #     elapsed = time.time() - t
-    #     print(elapsed)
-
-    # define the obs_config
-    observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 5, 'norm': True}
-    # define action space
-    action_space = gym.spaces.Box(low=0.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
-    # define the env
-    base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
-    for i in range(len(base_env.broker.rl_algo.algo_events) + 1):
-        base_env.step(action = np.array([0.5]))
-        if base_env.done == True:
-            base_env.reset()
+        # define the obs_config
+        observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 5, 'norm': True}
+        # define action space
+        action_space = gym.spaces.Box(low=0.0,
+                                      high=1.0,
+                                      shape=(1,),
+                                      dtype=np.float32)
+        # define the env
+        base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
+        for i in range(len(base_env.broker.rl_algo.algo_events) + 1):
+            base_env.step(action = np.array([0.5]))
+            if base_env.done == True:
+                base_env.reset()
