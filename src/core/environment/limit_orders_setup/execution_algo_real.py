@@ -142,6 +142,8 @@ class ExecutionAlgo:
 
 
     def reset(self,):
+        if type(self).__name__ != 'RLAlgo':
+            self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()
@@ -225,9 +227,9 @@ class ExecutionAlgo:
         if trade_log is not None and trade_log['quantity'] > 0:
             self.vol_remaining -= Decimal(str(trade_log['quantity']))
             self.bucket_vol_remaining[self.bucket_idx] -= Decimal(str(trade_log['quantity']))
-        # TODO: Currently this ValueError is sometimes raised due to rounding errors, I suggest commenting it out.
-        # if self.vol_remaining < -self.tick_size or self.bucket_vol_remaining[self.bucket_idx] < -self.tick_size:
-        #     raise ValueError("More volume than available placed!")
+        # TODO: Currently this ValueError is sometimes raised due to rounding errors, right now it allows for 1 tick of rounding error per bucket
+        if self.vol_remaining < -self.tick_size * len(self.bucket_volumes) or self.bucket_vol_remaining[self.bucket_idx] < -self.tick_size:
+            raise ValueError("More volume than available placed!")
 
         if event_type is not None and event_type == 'bucket_bound':
             self.bucket_idx += 1
@@ -302,10 +304,10 @@ class TWAPAlgo(ExecutionAlgo):
         v = lob.bids.get_price_list(lob.get_best_bid()).volume
         tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
         self.tick_size = tick
-
+        self.date = dt.date()
         # Derive trading schedules
-        start_time = datetime.combine(dt.date(), datetime.strptime(self.start_time, '%H:%M:%S').time())
-        end_time = datetime.combine(dt.date(), datetime.strptime(self.end_time, '%H:%M:%S').time())
+        start_time = datetime.combine(self.date, datetime.strptime(self.start_time, '%H:%M:%S').time())
+        end_time = datetime.combine(self.date, datetime.strptime(self.end_time, '%H:%M:%S').time())
         self.buckets = Bucket(start_time, end_time, self.rand_bucket_bounds_width)
 
         # split volume across buckets and check if this worked
@@ -364,7 +366,7 @@ class RLAlgo(ExecutionAlgo):
         self.volumes_per_trade = []
         for bucket in range(len(benchmark_algo.volumes_per_trade)):
             self.volumes_per_trade.append(list([Decimal(0) for order_event in benchmark_algo.volumes_per_trade_default[bucket]]))
-        self.volumes_per_trade_default = benchmark_algo.volumes_per_trade_default
+        self.volumes_per_trade_default = copy.deepcopy(benchmark_algo.volumes_per_trade_default)
 
         self.vol_remaining = Decimal(str(self.volume))
         self.placed_orders = []

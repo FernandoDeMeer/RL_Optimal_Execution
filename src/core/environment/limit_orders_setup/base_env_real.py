@@ -65,7 +65,7 @@ class BaseEnv(gym.Env, ABC):
                                                                 random.randint(0,59)),'%H:%M:%S').time() #Set execution horizon within the minute scale
         self.broker.benchmark_algo = TWAPAlgo(trade_direction= 1,  # Train different models for each trade_direction
                                             volume= random.randint(500,1000),
-                                            no_of_slices= random.randint(3,10),
+                                            no_of_slices= random.randint(5,10),
                                             bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])),
                                             start_time= start_time,
                                             end_time= str((datetime.strptime(start_time,'%H:%M:%S') + timedelta(hours= execution_horizon.hour,minutes=execution_horizon.minute,seconds=execution_horizon.second)).time()),
@@ -122,7 +122,7 @@ class BaseEnv(gym.Env, ABC):
         if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
             self.calc_reward()
             self.done = True
-            self.state = []
+            # self.state = []
         else:
             # Go to the next event otherwise
             self.state = self.build_observation_at_event(event_time = self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
@@ -257,10 +257,10 @@ if __name__ == '__main__':
     import os
     from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
     from src.data.historical_data_feed import HistoricalDataFeed
-    for i in range(1000):
+    for i in range(50):
         seed = random.randint(0,100000)
-        random.seed(a= 59898)
         print(seed)
+        random.seed(a= seed)
         # define the datafeed
         dir = '../../../'
         lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
@@ -270,12 +270,6 @@ if __name__ == '__main__':
         # define the broker class
         broker = Broker(lob_feed)
 
-        # for i in range(100):
-        #     t = time.time()
-        #     broker.simulate_algo(algo)
-        #     broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
-        #     elapsed = time.time() - t
-        #     print(elapsed)
 
         # define the obs_config
         observation_space_config = {'lob_depth': 5, 'nr_of_lobs': 5, 'norm': True}
@@ -286,7 +280,15 @@ if __name__ == '__main__':
                                       dtype=np.float32)
         # define the env
         base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
-        for i in range(len(base_env.broker.rl_algo.algo_events) + 1):
+
+        # for i in range(10):
+        #     t = time.time()
+        #     broker.simulate_algo(broker.benchmark_algo)
+        #     broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
+        #     elapsed = time.time() - t
+        #     print(elapsed)
+
+        for k in range(len(base_env.broker.rl_algo.algo_events) + 1):
             base_env.step(action = np.array([0.5]))
             if base_env.done == True:
                 base_env.reset()
