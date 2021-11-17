@@ -4,11 +4,15 @@ from datetime import datetime,timedelta
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
-from src.core.environment.limit_orders_setup.execution_algo_real import RLAlgo
+from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo, RLAlgo
 from src.core.environment.limit_orders_setup.broker_real import Broker
+from src.data.historical_data_feed import HistoricalDataFeed
 from src.ui.user_interface import UIAppWindow, UserInterface
 import time
 import copy
+import random
+import os
+
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -20,7 +24,7 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     ask_prices = [float(asks) for asks in ask_prices]
 
     if norm_price:
-        prices = (np.array(bid_prices + ask_prices) / float(norm_price)-1)*100 #have to make sure bid_prices and ask_prices are lists
+        prices = (np.array(bid_prices + ask_prices) / float(norm_price)) #have to make sure bid_prices and ask_prices are lists
     else:
         prices = np.array(bid_prices + ask_prices)
 
@@ -106,7 +110,10 @@ class BaseEnv(gym.Env, ABC):
         self.broker.rl_algo.event_idx += 1
 
         #Update the volume the RLAlgo has chosen for the order
-        vol_to_trade = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx].quantize(Decimal('1.0'))
+        vol_to_trade = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        vol_to_trade = round(vol_to_trade, 3)
+        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
+            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = vol_to_trade
         self.broker.rl_algo.order_idx += 1
 
@@ -253,10 +260,6 @@ class BaseEnv(gym.Env, ABC):
 
 if __name__ == '__main__':
 
-    import random
-    import os
-    from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
-    from src.data.historical_data_feed import HistoricalDataFeed
     for i in range(50):
         seed = random.randint(0,100000)
         print(seed)
