@@ -45,7 +45,7 @@ class HistoricalDataFeed(DataFeed):
                  lob_depth=20):
 
         self.data_dir = data_dir
-        self.instrument = instrument
+        # self.instrument = instrument
 
         self.start_day = start_day
         self.end_day = end_day
@@ -53,7 +53,7 @@ class HistoricalDataFeed(DataFeed):
         if start_day is None and end_day is None:
 
             # load all files available
-            self.binary_files = listdir("{}/{}".format(data_dir, instrument))
+            self.binary_files = listdir("{}".format(data_dir))
         elif None not in (start_day, end_day):
 
             # load only relevant files between dates
@@ -159,9 +159,7 @@ class HistoricalDataFeed(DataFeed):
     def _load_data(self):
         """ Load data from file """
 
-        self.data = np.fromfile("{}/{}/{}".format(self.data_dir,
-                                                  self.instrument,
-                                                  self.binary_files[self.binary_file_idx]), dtype=np.float64)
+        self.data = np.fromfile("{}/{}".format(self.data_dir, self.binary_files[self.binary_file_idx]), dtype=np.float64)
         self.data = self.data.reshape(-1, 4 * self.lob_depth + 1)
 
     def _select_row_idx(self):

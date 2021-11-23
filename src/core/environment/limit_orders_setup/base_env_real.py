@@ -246,7 +246,7 @@ class BaseEnv(gym.Env, ABC):
         # 0 padding whenever this gets smaller...
         # NaN in the beginning if I don't have history yet...
 
-        return obs
+        return np.array(obs, dtype=np.float32)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
