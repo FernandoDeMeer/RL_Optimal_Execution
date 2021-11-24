@@ -196,8 +196,8 @@ class BaseEnv(gym.Env, ABC):
         low = np.concatenate((zeros, zeros, zeros, zeros, np.array([0]), np.array([0])), axis=0)
         high = np.concatenate((ones*np.inf, ones*np.inf,
                                ones*np.inf, ones*np.inf,
-                               np.array([self.broker.benchmark_algo.volume]),
-                               np.array([self.broker.benchmark_algo.no_of_slices])), axis= 0)
+                               np.array([np.inf]),
+                               np.array([np.inf])), axis= 0)
 
         obs_space_n = (n_obs_onesided * 4 + 2)
         assert low.shape[0] == high.shape[0] == obs_space_n
