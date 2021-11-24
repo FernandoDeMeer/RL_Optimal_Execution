@@ -93,6 +93,7 @@ def dummy_test_env():
 
         if done:
             obs = env.reset()
+            print("rezet")
 
         if not env.observation_space.contains(obs):
             print("houston, probelmz")
@@ -102,7 +103,7 @@ if __name__ == "__main__":
 
     args = init_arg_parser()
 
-    dummy_test_env()
+    # dummy_test_env()
 
     # For debugging the env or other modules, set local_mode=True
     ray.init(local_mode=True, num_cpus=args.num_cpus)
@@ -119,7 +120,7 @@ if __name__ == "__main__":
 
         "model": {
             "use_lstm": True,
-            "lstm_cell_size": 10
+            "lstm_cell_size": 10,
             # "max_seq_len": 20,
         },
 
