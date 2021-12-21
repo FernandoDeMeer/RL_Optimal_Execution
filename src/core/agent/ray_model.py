@@ -9,6 +9,8 @@ from ray.rllib.utils.annotations import override
 tf1, tf, tfv = try_import_tf()
 
 
+# or use this: https://github.com/ray-project/ray/blob/4795048f1b3779658e8b0ffaa05b1eb61914bc60/rllib/examples/models/rnn_model.py#L77
+
 class EndtoEndModel(TFModelV2):
     """
     LSTM architecture from "An End-to-End Optimal Trade Execution Framework

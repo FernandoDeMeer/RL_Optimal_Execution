@@ -1,3 +1,5 @@
+import os
+import random
 import gym
 import numpy as np
 from datetime import datetime,timedelta
@@ -7,12 +9,8 @@ from abc import ABC
 from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo, RLAlgo
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.ui.user_interface import UIAppWindow, UserInterface
-import time
-import copy
-import random
-import os
-
+from src.ui.ui_comm import UIServer
+from src.ui.ui_comm import Charts as Charts
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -40,16 +38,13 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
 class BaseEnv(gym.Env, ABC):
 
     def __init__(self,
-                 show_ui,
                  broker,
                  obs_config,
                  action_space,
                  ):
 
-        if show_ui:
-            self.ui = UIAppWindow()
-        else:
-            self.ui = None
+        self.ui = None
+        self.ui_epoch = 0
 
         self.broker = broker
         self.obs_config = obs_config
@@ -57,6 +52,10 @@ class BaseEnv(gym.Env, ABC):
         self.build_observation_space()
         self.action_space = action_space
         self.seed()
+
+        self.bmk_vwap = 0.0
+        self.rl_vwap = 0.0
+        self.mid_pxs = []
 
     def reset(self):
         # Randomize the volume, no_of_slices, start_time, end_time and rand_bucket_bounds of self.benchmark_algo
@@ -89,7 +88,7 @@ class BaseEnv(gym.Env, ABC):
                                  bucket_placement_func= self.broker.benchmark_algo.bucket_placement_func,
                                  broker_data_feed=self.broker.data_feed)
 
-        self.mid_price_history = []
+        self.mid_pxs = []
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
 
@@ -98,11 +97,11 @@ class BaseEnv(gym.Env, ABC):
         self.done = False
         self.info = {}
 
+        self.ui_epoch += 1
+
         return self.state
 
     def step(self, action):
-
-        # print("time idx: {}\t action: {}".format(self.time, action))
 
         assert self.done is False, (
             'reset() must be called before step()')
@@ -124,50 +123,59 @@ class BaseEnv(gym.Env, ABC):
             self.broker.rl_algo.bucket_idx += 1
             self.broker.rl_algo.order_idx = 0
 
+        # if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 1:
+        #     self.bmk_vwap, self.rl_vwap = self.broker.calc_vwaps_bucket()
 
     # Calculate rewards, if we are at the end of an episode
         if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
             self.calc_reward()
             self.done = True
-            # self.state = []
         else:
             # Go to the next event otherwise
             self.state = self.build_observation_at_event(event_time = self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
 
         self.info = {}
+
         return self.state, self.reward, self.done, self.info
 
     def render(self, mode='human'):
 
-        self.ui.user_interface.update_data([
-            {
-                "event": "{}#{}".format(UserInterface.CHART_0, "0"),
-                "data": np.array(copy.deepcopy(self.benchmark_qty_remaining_history))
-            },
-            {
-                "event": "{}#{}".format(UserInterface.CHART_0, "1"),
-                "data": np.array(copy.deepcopy(self.rl_qty_remaining_history))
-            },
-            {
-                "event": "{}#{}".format(UserInterface.CHART_1, "0"),
-                "data": np.array(copy.deepcopy(self.trades_monitor.data["benchmark"]["qty"]))
-            },
-            {
-                "event": "{}#{}".format(UserInterface.CHART_1, "1"),
-                "data": np.array(copy.deepcopy(self.trades_monitor.data["rl"]["qty"]))
-            },
-            {
-                "event": "{}#{}".format(UserInterface.CHART_2, "0"),
-                "data": np.array(copy.deepcopy(self.mid_price_history))
-            },
-        ])
+        ##
+        #### send ONLY plain python list with primitives (floats or ints) ####
+        ##
 
-        time.sleep(0.1)
-        self.ui.controller.check_wait_on_event("wait_step")
+        if self.ui is None:
+            self.ui = UIServer()
 
-        if self.done:
-            print("done")
-            self.ui.controller.check_wait_on_event("wait_episode")
+        pxs = []
+        for d in self.mid_pxs:
+            pxs.append(float(d))
+
+        lvls = []
+        if False:
+            for _ in range(int(len(pxs) / 2)):
+                lvls.append(float(self.bmk_vwap))
+
+            for _ in range(int(len(pxs) / 2)):
+                lvls.append(float(self.rl_vwap))
+
+        timeseries_data = [
+            {
+                "event": "{}#{}".format(Charts.CHART_0, "0"),
+                "data": pxs
+            },
+            {
+                "event": "{}#{}".format(Charts.CHART_0, "1"),
+                "data": lvls
+            },
+            {
+                "event": "{}#{}".format(Charts.CHART_1, "0"),
+                "data": lvls
+            },
+        ]
+
+        self.ui.send_rendering_data(rl_session_epoch=self.ui_epoch,
+                                    data=timeseries_data)
 
     def build_observation_space(self):
 
@@ -224,6 +232,8 @@ class BaseEnv(gym.Env, ABC):
         if self.obs_config['norm']:
             mid = (self.broker.hist_dict['rl_lob'][-1].get_best_ask() +
                    self.broker.hist_dict['rl_lob'][-1].get_best_bid()) / 2
+            self.mid_pxs.append(float(mid))
+
             vol_bid = self.broker.hist_dict['rl_lob'][-1].bids.volume
             vol_ask = self.broker.hist_dict['rl_lob'][-1].asks.volume
             for lob in self.broker.hist_dict['rl_lob'][-self.obs_config['nr_of_lobs']:]:
@@ -282,7 +292,7 @@ if __name__ == '__main__':
                                       shape=(1,),
                                       dtype=np.float32)
         # define the env
-        base_env = BaseEnv(show_ui=False, broker=broker,obs_config= observation_space_config, action_space = action_space)
+        base_env = BaseEnv(broker=broker,obs_config= observation_space_config, action_space = action_space)
 
         # for i in range(10):
         #     t = time.time()

@@ -60,7 +60,7 @@ class HistoricalDataFeed(DataFeed):
             files_between_date = []
             while start_day <= end_day:
                 f = "{}__{}.{}".format(instrument, start_day.strftime('%Y_%m_%d'), "dat")
-                if path.isfile("{}/{}/{}".format(data_dir, instrument, f)):
+                if path.isfile("{}/{}".format(data_dir, f)):
                     files_between_date.append(f)
                 start_day += timedelta(1)
             self.binary_files = files_between_date
