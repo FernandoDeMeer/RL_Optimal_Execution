@@ -105,10 +105,10 @@ class Bucket:
 
 
 class ExecutionAlgo:
-    """ The ExecutionAlgo class is a parent class for the benchmark algos for our RL agent.
+    """ The ExecutionAlgo class is a parent class for the benchmark algos of our RL agent.
 
         Args:
-            trade_direction (int): The direction of the trade to execute
+            trade_direction (int): The direction of the trade to execute, 1 stands for buying, -1 for selling.
             volume (int): volume to trade (i.e. parent order volume)
             start_time (string): start of execution in '%H:%M:%S' format
             end_time (string): end of execution in '%H:%M:%S' format
@@ -145,7 +145,6 @@ class ExecutionAlgo:
         if type(self).__name__ != 'RLAlgo':
             self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
         self.vol_remaining = Decimal(str(self.volume))
-        self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()
         self.event_idx = 0
         self.order_idx = 0
@@ -219,8 +218,6 @@ class ExecutionAlgo:
         if self.order_idx / self.no_of_slices >= 1:
             self.order_idx = 0
 
-        if order['quantity'] > 0:
-            self.placed_orders.append(order)
         return order
 
     def update_remaining_volume(self, trade_log, event_type=None):
@@ -321,6 +318,8 @@ class TWAPAlgo(ExecutionAlgo):
         # TODO: This ValueError is sometimes raised due to rounding errors, won't affect the Env much, I suggest to comment it out.
         # if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
         #     raise ValueError("Volumes split across orders didn't work out!")
+        self.bmk_vwap = 0
+
 
 
     def _split_volume_across_buckets(self):
@@ -369,10 +368,11 @@ class RLAlgo(ExecutionAlgo):
         self.volumes_per_trade_default = copy.deepcopy(benchmark_algo.volumes_per_trade_default)
 
         self.vol_remaining = Decimal(str(self.volume))
-        self.placed_orders = []
         self.bucket_vol_remaining = self.bucket_volumes.copy()
         self.event_idx = 0
         self.order_idx = 0
         self.bucket_idx = 0
+        self.rl_vwap = 0
+
 
 

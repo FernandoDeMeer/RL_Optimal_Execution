@@ -207,7 +207,7 @@ if __name__ == "__main__":
                                                          metric='episode_reward_mean')
     checkpoint_path = checkpoints[0][0]
 
-    # checkpoint_path = '/Users/....../..../RLOptimalTradeExecution/data/sessions/1640090602/PPO_2021-12-21_14-43-22/PPO_lob_env_955ee_00000_0_2021-12-21_14-43-23/checkpoint_000010/checkpoint-10'
+    checkpoint_path = r'C:\Users\demp\Documents\Repos\RLOptimalTradeExecution\data\sessions/1641411150\PPO_2022-01-05_20-32-30\PPO_lob_env_38d29_00000_0_2022-01-05_20-32-30\checkpoint_000010\checkpoint-10'
 
     reward = test_agent_one_episode(config=config,
                                     agent_path=checkpoint_path,

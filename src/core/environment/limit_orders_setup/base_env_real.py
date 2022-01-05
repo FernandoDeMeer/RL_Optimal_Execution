@@ -53,9 +53,7 @@ class BaseEnv(gym.Env, ABC):
         self.action_space = action_space
         self.seed()
 
-        self.bmk_vwap = 0.0
-        self.rl_vwap = 0.0
-        self.mid_pxs = []
+        self.broker.mid_pxs = []
 
     def reset(self):
         # Randomize the volume, no_of_slices, start_time, end_time and rand_bucket_bounds of self.benchmark_algo
@@ -79,8 +77,9 @@ class BaseEnv(gym.Env, ABC):
         self.broker.reset(self.broker.benchmark_algo,)
 
         # simulate the benchmark algo and declare the RLAlgo
-        self.broker.simulate_algo(self.broker.benchmark_algo)
+        # self.broker.simulate_algo(self.broker.benchmark_algo)
 
+        # Declare the RLAlgo
         self.broker.rl_algo = RLAlgo(benchmark_algo= self.broker.benchmark_algo,
                                  trade_direction=self.broker.benchmark_algo.trade_direction,
                                  volume= self.broker.benchmark_algo.volume,
@@ -106,7 +105,8 @@ class BaseEnv(gym.Env, ABC):
         assert self.done is False, (
             'reset() must be called before step()')
 
-        self.broker.rl_algo.event_idx += 1
+        self.broker.rl_algo.event_idx += 1 # The event_idx of the rl_algo during stepping is only updated on order placements,
+        # not on bucket ends, during simulation it will be reset to 0 and then updated on both.
 
         #Update the volume the RLAlgo has chosen for the order
         vol_to_trade = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
@@ -119,16 +119,15 @@ class BaseEnv(gym.Env, ABC):
         # update the remaining bucket vol
         self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx] -= vol_to_trade
 
+        # check if we are at the end of a bucket
         if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 0:
+            self.calc_reward('bucket')
             self.broker.rl_algo.bucket_idx += 1
             self.broker.rl_algo.order_idx = 0
 
-        # if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 1:
-        #     self.bmk_vwap, self.rl_vwap = self.broker.calc_vwaps_bucket()
-
-    # Calculate rewards, if we are at the end of an episode
+        # Check if we are at the end of an episode:
         if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
-            self.calc_reward()
+            # self.calc_reward('episode')
             self.done = True
         else:
             # Go to the next event otherwise
@@ -152,12 +151,11 @@ class BaseEnv(gym.Env, ABC):
             pxs.append(float(d))
 
         lvls = []
-        if False:
-            for _ in range(int(len(pxs) / 2)):
-                lvls.append(float(self.bmk_vwap))
+        for _ in range(int(len(pxs) / 2)):
+            lvls.append(float(self.broker.benchmark_algo.bmk_vwap))
 
-            for _ in range(int(len(pxs) / 2)):
-                lvls.append(float(self.rl_vwap))
+        for _ in range(int(len(pxs) / 2)):
+            lvls.append(float(self.broker.rl_algo.rl_vwap))
 
         timeseries_data = [
             {
@@ -262,21 +260,40 @@ class BaseEnv(gym.Env, ABC):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def calc_reward(self,):
-        bmk_vwap, rl_vwap = self.broker.calc_vwaps()
-        if (rl_vwap - bmk_vwap) * self.broker.rl_algo.trade_direction < 0:
-            self.reward += 1
+    def calc_reward(self, reward_type):
+
+        if reward_type == 'episode':
+            self.broker.calc_vwaps()
+            # Sparse 1-0 reward
+            if (self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap) * self.broker.rl_algo.trade_direction < 0:
+                self.reward += 1
+
+        elif reward_type == 'bucket':
+            bmk_bucket_vwap, rl_bucket_vwap = self.broker.calc_vwaps_bucket()
+            if self.broker.rl_algo.bucket_idx == 0:
+                self.broker.benchmark_algo.bmk_vwap = bmk_bucket_vwap
+                self.broker.rl_algo.rl_vwap = rl_bucket_vwap
+            else:
+                self.broker.benchmark_algo.bmk_vwap = self.broker.benchmark_algo.bmk_vwap * (self.broker.rl_algo.bucket_idx/(self.broker.rl_algo.bucket_idx +1)) +\
+                                                      bmk_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
+                self.broker.rl_algo.rl_vwap = self.broker.rl_algo.rl_vwap * (self.broker.rl_algo.bucket_idx/(self.broker.rl_algo.bucket_idx +1)) +\
+                                              rl_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
+            # print(self.broker.benchmark_algo.bmk_vwap, self.broker.rl_algo.rl_vwap) #TODO: Uncomment to see vwaps during training
+            # % of outperformance vs benchmark reward
+            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)/self.broker.benchmark_algo.bmk_vwap) * self.broker.rl_algo.trade_direction
+
 
 
 if __name__ == '__main__':
 
     for i in range(50):
         seed = random.randint(0,100000)
+        # seed = 64360
         print(seed)
         random.seed(a= seed)
         # define the datafeed
         dir = '../../../'
-        lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
+        lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data/market/btcusdt/'),
                                       instrument='btc_usdt',
                                       samples_per_file=200)
 
@@ -304,4 +321,6 @@ if __name__ == '__main__':
         for k in range(len(base_env.broker.rl_algo.algo_events) + 1):
             base_env.step(action = np.array([0.5]))
             if base_env.done == True:
+                print(base_env.broker.benchmark_algo.bmk_vwap, base_env.broker.rl_algo.rl_vwap)
+                print(base_env.reward)
                 base_env.reset()
