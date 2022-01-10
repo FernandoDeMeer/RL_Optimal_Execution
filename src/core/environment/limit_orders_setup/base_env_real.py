@@ -269,7 +269,7 @@ class BaseEnv(gym.Env, ABC):
                 self.reward += 1
 
         elif reward_type == 'bucket':
-            bmk_bucket_vwap, rl_bucket_vwap = self.broker.calc_vwaps_bucket()
+            bmk_bucket_vwap, rl_bucket_vwap, unexecuted_rl_vol_percent  = self.broker.calc_vwaps_bucket()
             if self.broker.rl_algo.bucket_idx == 0:
                 self.broker.benchmark_algo.bmk_vwap = bmk_bucket_vwap
                 self.broker.rl_algo.rl_vwap = rl_bucket_vwap
@@ -280,7 +280,8 @@ class BaseEnv(gym.Env, ABC):
                                               rl_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
             # print(self.broker.benchmark_algo.bmk_vwap, self.broker.rl_algo.rl_vwap) #TODO: Uncomment to see vwaps during training
             # % of outperformance vs benchmark reward
-            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)/self.broker.benchmark_algo.bmk_vwap) * self.broker.rl_algo.trade_direction
+            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)/self.broker.benchmark_algo.bmk_vwap) \
+                          * self.broker.rl_algo.trade_direction - unexecuted_rl_vol_percent
 
 
 
@@ -319,7 +320,7 @@ if __name__ == '__main__':
         #     print(elapsed)
 
         for k in range(len(base_env.broker.rl_algo.algo_events) + 1):
-            base_env.step(action = np.array([0.5]))
+            base_env.step(action = np.array([0.01]))
             if base_env.done == True:
                 print(base_env.broker.benchmark_algo.bmk_vwap, base_env.broker.rl_algo.rl_vwap)
                 print(base_env.reward)

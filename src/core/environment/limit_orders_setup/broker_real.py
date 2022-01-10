@@ -278,14 +278,18 @@ class Broker(ABC):
         bmk_executed_prices = [bmk_trade['quantity']*Decimal(bmk_trade['price'])
                                for bmk_trade in self.trade_logs['benchmark_algo']
                                if bmk_trade['message'] == 'trade']
-        bmk_bucket_vwap = float(sum(bmk_executed_prices)/self.benchmark_algo.bucket_volumes[0])
+
+        bmk_bucket_vwap = float(sum(bmk_executed_prices)/(bucket_bmk_algo.bucket_volumes[0] - bucket_bmk_algo.bucket_vol_remaining[0]))
 
         rl_executed_prices = [rl_trade['quantity']*Decimal(rl_trade['price'])
                                for rl_trade in self.trade_logs['rl_algo']
                                if rl_trade['message'] == 'trade']
-        rl_bucket_vwap = float(sum(rl_executed_prices)/self.rl_algo.bucket_volumes[0])
 
-        return bmk_bucket_vwap, rl_bucket_vwap
+        rl_bucket_vwap = float(sum(rl_executed_prices)/(bucket_rl_algo.bucket_volumes[0] - bucket_rl_algo.bucket_vol_remaining[0]))
+
+        unexecuted_rl_vol_percent= float(bucket_rl_algo.bucket_vol_remaining[0])/float(self.rl_algo.bucket_volumes[self.rl_algo.bucket_idx])
+
+        return bmk_bucket_vwap, rl_bucket_vwap, unexecuted_rl_vol_percent
 
 if __name__ == '__main__':
 
