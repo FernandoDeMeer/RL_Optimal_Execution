@@ -189,8 +189,6 @@ class Broker(ABC):
                     self.remaining_order['benchmark_algo'].append(bmk_order_temp)
                 else:
                     self.remaining_order['benchmark_algo'] = []
-            if order['type'] == 'market':
-                self.remaining_order['benchmark_algo'] = []
 
         if algo_type == 'RLAlgo':
             input_lob = copy.deepcopy(self.hist_dict['rl_lob'][-1])
@@ -205,8 +203,6 @@ class Broker(ABC):
                     self.remaining_order['rl_algo'].append(rl_order_temp)
                 else:
                     self.remaining_order['rl_algo'] = []
-            if order['type'] == 'market':
-                self.remaining_order['rl_algo'] = []
         return log
 
     def simulate_algo(self, algo):
@@ -225,6 +221,29 @@ class Broker(ABC):
 
             # update the remaining quantities to trade
             algo.update_remaining_volume(log, event['type'])
+
+            if len(self.remaining_order['benchmark_algo'])!= 0:
+                if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
+                    # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                    while len(self.remaining_order['benchmark_algo'])!= 0:
+                        dt, lob = self.data_feed.next_lob_snapshot()
+                        self._record_lob(dt, lob, algo)
+                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                        # place the orders and update the remaining quantities to trade in the algo
+                        log = self.place_orders(order_temp_bmk,type(algo).__name__)
+                        algo.vol_remaining -= Decimal(str(log['quantity']))
+                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+            if len(self.remaining_order['rl_algo'])!= 0:
+                if self.remaining_order['rl_algo'][0]['type'] == 'market':
+                    # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                    while len(self.remaining_order['rl_algo'])!= 0:
+                        dt, lob = self.data_feed.next_lob_snapshot()
+                        self._record_lob(dt, lob, algo)
+                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                        # place the orders and update the remaining quantities to trade in the algo
+                        log = self.place_orders(order_temp_rl,type(algo).__name__)
+                        algo.vol_remaining -= Decimal(str(log['quantity']))
+                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
 
     def get_last_bucket_algo(self,algo_type):
 
@@ -274,22 +293,22 @@ class Broker(ABC):
         self.simulate_algo(bucket_bmk_algo)
         bucket_rl_algo = self.get_last_bucket_algo('rl')
         self.simulate_algo(bucket_rl_algo)
+        # Check that we don't have any unexecuted volume
+        assert abs(bucket_bmk_algo.bucket_vol_remaining[0]) <= self.benchmark_algo.tick_size and abs(bucket_rl_algo.bucket_vol_remaining[0]) <= self.rl_algo.tick_size
 
         bmk_executed_prices = [bmk_trade['quantity']*Decimal(bmk_trade['price'])
                                for bmk_trade in self.trade_logs['benchmark_algo']
                                if bmk_trade['message'] == 'trade']
-
-        bmk_bucket_vwap = float(sum(bmk_executed_prices)/(bucket_bmk_algo.bucket_volumes[0] - bucket_bmk_algo.bucket_vol_remaining[0]))
+        bmk_bucket_vwap = float(sum(bmk_executed_prices)/(bucket_bmk_algo.bucket_volumes[0]))
 
         rl_executed_prices = [rl_trade['quantity']*Decimal(rl_trade['price'])
                                for rl_trade in self.trade_logs['rl_algo']
                                if rl_trade['message'] == 'trade']
+        rl_bucket_vwap = float(sum(rl_executed_prices)/(bucket_rl_algo.bucket_volumes[0]))
 
-        rl_bucket_vwap = float(sum(rl_executed_prices)/(bucket_rl_algo.bucket_volumes[0] - bucket_rl_algo.bucket_vol_remaining[0]))
+        # unexecuted_rl_vol_percent= float(bucket_rl_algo.bucket_vol_remaining[0])/float(self.rl_algo.bucket_volumes[self.rl_algo.bucket_idx])
 
-        unexecuted_rl_vol_percent= float(bucket_rl_algo.bucket_vol_remaining[0])/float(self.rl_algo.bucket_volumes[self.rl_algo.bucket_idx])
-
-        return bmk_bucket_vwap, rl_bucket_vwap, unexecuted_rl_vol_percent
+        return bmk_bucket_vwap, rl_bucket_vwap
 
 if __name__ == '__main__':
 
