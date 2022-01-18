@@ -79,14 +79,16 @@ def lob_env_creator(env_config):
 
     broker = Broker(lob_feed)
 
-    observation_space_config = {"lob_depth": 5, "nr_of_lobs": 5, "norm": True}
+    observation_space_config = {'obs_config': {'lob_depth': 5,
+                                               'nr_of_lobs': 5,
+                                               'norm': True}}
     action_space = gym.spaces.Box(low=0.0,
                                   high=1.0,
                                   shape=(1,),
                                   dtype=np.float32)
 
     return BaseEnv(broker=broker,
-                   obs_config=observation_space_config,
+                   config=observation_space_config,
                    action_space=action_space)
 
 
