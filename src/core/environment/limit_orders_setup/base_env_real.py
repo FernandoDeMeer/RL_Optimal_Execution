@@ -127,16 +127,23 @@ class BaseEnv(gym.Env, ABC):
 
         return self.state
 
+    def _convert_action(self, action):
+        """ Used if actions need to be transformed without having to change entire step() method """
+        return action[0]
+
     def step(self, action):
 
         assert self.done is False, (
             'reset() must be called before step()')
 
+        # convert action if necessary
+        action = self._convert_action(action)
+
         self.broker.rl_algo.event_idx += 1 # The event_idx of the rl_algo during stepping is only updated on order placements,
         # not on bucket ends, during simulation it will be reset to 0 and then updated on both.
 
         #Update the volume the RLAlgo has chosen for the order
-        vol_to_trade = Decimal(str(action[0])) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         vol_to_trade = round(vol_to_trade, 3)
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
             vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
