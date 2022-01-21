@@ -87,7 +87,7 @@ class BaseEnv(gym.Env, ABC):
                                                       self.config['start_config']['second_high']))
         start_time = str(datetime.strptime(start_time, '%H:%M:%S').time())
 
-        self.broker.benchmark_algo = TWAPAlgo(trade_direction=1,  # Train different models for each trade_direction
+        self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.config['trade_config']['trade_direction'],  # Train different models for each trade_direction
                                               volume=random.randint(self.config['trade_config']['vol_low'],
                                                                     self.config['trade_config']['vol_high']),
                                               no_of_slices=random.randint(self.config['trade_config']['no_slices_low'],
