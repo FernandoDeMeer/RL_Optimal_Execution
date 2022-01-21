@@ -313,7 +313,7 @@ class BaseEnv(gym.Env, ABC):
                 self.broker.rl_algo.rl_vwap = self.broker.rl_algo.rl_vwap * (self.broker.rl_algo.bucket_idx/(self.broker.rl_algo.bucket_idx +1)) +\
                                               rl_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
             # % of outperformance vs benchmark reward
-            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)/self.broker.benchmark_algo.bmk_vwap)
+            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)*self.broker.benchmark_algo.trade_direction/self.broker.benchmark_algo.bmk_vwap)
 
     def _validate_config(self):
         """ tests if all inputs are allowed """
