@@ -19,6 +19,9 @@ from ray.rllib.agents.ppo import PPOTrainer
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.agent.ray_model import CustomRNNModel
+
+from ray.rllib.models import ModelCatalog
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +38,7 @@ def init_arg_parser():
     parser.add_argument(
         "--framework",
         choices=["tf", "torch"],
-        default="torch",
+        default="tf",
         help="The DL framework specifier.")
 
     parser.add_argument(
@@ -142,6 +145,7 @@ if __name__ == "__main__":
     # For debugging the env or other modules, set local_mode=True
     ray.init(local_mode=True, num_cpus=args.num_cpus)
     register_env("lob_env", lob_env_creator)
+    ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
     config = {
         "env": args.env,
@@ -175,12 +179,9 @@ if __name__ == "__main__":
         "clip_param": 0.1,
         "vf_share_layers": False,
         "model": {
-            "use_lstm": True,
-            # TODO: change lstm_cell_size according to machine running: (local) laptop/dgx
-            "lstm_cell_size": 128,
-            # "lstm_use_prev_action": False,
-            # # Whether to feed r_{t-1} to LSTM.
-            # "lstm_use_prev_reward": False,
+            "custom_model": "end_to_end_model",
+            "custom_model_config": {'fcn_depth': 128,
+                                    'lstm_cells': 256},
         },
         "env_config": {
             "symbol": args.symbol,
@@ -208,8 +209,6 @@ if __name__ == "__main__":
     checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial('episode_reward_mean'),
                                                          metric='episode_reward_mean')
     checkpoint_path = checkpoints[0][0]
-
-    checkpoint_path = r'C:\Users\demp\Documents\Repos\RLOptimalTradeExecution\data\sessions/1641411150\PPO_2022-01-05_20-32-30\PPO_lob_env_38d29_00000_0_2022-01-05_20-32-30\checkpoint_000010\checkpoint-10'
 
     reward = test_agent_one_episode(config=config,
                                     agent_path=checkpoint_path,
