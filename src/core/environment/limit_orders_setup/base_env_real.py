@@ -153,15 +153,18 @@ class BaseEnv(gym.Env, ABC):
         # update the remaining bucket vol
         self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx] -= vol_to_trade
 
+        # Set a default reward of 0 that will be modified if we are at the end of a bucket or an episode.
+        self.reward = 0
+        
         # check if we are at the end of a bucket
         if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 0:
-            self.calc_reward('bucket')
+            self.calc_reward('bucket') # Comment this out if calculating rewards at the end of the execution.
             self.broker.rl_algo.bucket_idx += 1
             self.broker.rl_algo.order_idx = 0
 
         # Check if we are at the end of an episode:
         if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
-            # self.calc_reward('episode')
+            # self.calc_reward('episode') # Comment this out if calculating rewards at the end of each bucket.
             self.done = True
         else:
             # Go to the next event otherwise
