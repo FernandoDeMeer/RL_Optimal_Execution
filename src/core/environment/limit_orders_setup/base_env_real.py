@@ -2,7 +2,7 @@ import os
 import random
 import gym
 import numpy as np
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
@@ -25,13 +25,14 @@ DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                                                                     in range(no_of_slices)])),
                                        'rand_bucket_low': 0,
                                        'rand_bucket_high': 0},
-                      'start_config': {'hour_low': 0,
+                      'start_config': {'hour_low': 1,
                                        'hour_high': 22,
                                        'minute_low': 0,
                                        'minute_high': 59,
                                        'second_low': 0,
                                        'second_high': 59},
-                      'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240]}}
+                      'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240]},
+                      'reset_config': {'reset_num_episodes': 1}}
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -43,13 +44,14 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     ask_prices = [float(asks) for asks in ask_prices]
 
     if norm_price:
-        prices = (np.array(bid_prices + ask_prices) / float(norm_price)) #have to make sure bid_prices and ask_prices are lists
+        # have to make sure bid_prices and ask_prices are lists
+        prices = (np.array(bid_prices + ask_prices) / float(norm_price))
     else:
         prices = np.array(bid_prices + ask_prices)
 
     if norm_vol_bid and norm_vol_ask:
         volumes = np.concatenate((np.array(bid_volumes)/float(norm_vol_bid),
-                            np.array(ask_volumes)/float(norm_vol_ask)), axis=0)
+                                  np.array(ask_volumes)/float(norm_vol_ask)), axis=0)
     else:
         volumes = np.concatenate((np.array(bid_volumes),
                                   np.array(ask_volumes)), axis=0)
@@ -58,11 +60,7 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
 
 class BaseEnv(gym.Env, ABC):
 
-    def __init__(self,
-                 broker,
-                 action_space,
-                 config={}
-                 ):
+    def __init__(self, broker, action_space, config={}):
 
         self.ui = None
         self.ui_epoch = 0
@@ -70,6 +68,7 @@ class BaseEnv(gym.Env, ABC):
         self.broker = broker
         self.config = self.add_default_dict(config)
         self._validate_config()
+        self.reset_counter = 0
         self.reset()
         self.build_observation_space()
         self.action_space = action_space
@@ -78,33 +77,28 @@ class BaseEnv(gym.Env, ABC):
         self.broker.mid_pxs = []
 
     def reset(self):
-        # Randomize the volume, no_of_slices, start_time, end_time and rand_bucket_bounds of self.benchmark_algo
-        start_time = '{}:{}:{}'.format(random.randint(self.config['start_config']['hour_low'],
-                                                      self.config['start_config']['hour_high']),
-                                       random.randint(self.config['start_config']['minute_low'],
-                                                      self.config['start_config']['hour_high']),
-                                       random.randint(self.config['start_config']['second_low'],
-                                                      self.config['start_config']['second_high']))
-        start_time = str(datetime.strptime(start_time, '%H:%M:%S').time())
+        """ Reset the environment """
 
-        self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.config['trade_config']['trade_direction'],  # Train different models for each trade_direction
-                                              volume=random.randint(self.config['trade_config']['vol_low'],
-                                                                    self.config['trade_config']['vol_high']),
-                                              no_of_slices=random.randint(self.config['trade_config']['no_slices_low'],
-                                                                          self.config['trade_config']['no_slices_high']),
-                                              bucket_placement_func=self.config['trade_config']['bucket_func'],
-                                              start_time=start_time,
-                                              end_time=str((datetime.strptime(start_time,'%H:%M:%S') +
-                                                            timedelta(minutes=random.choice(self.config['exec_config']['exec_times']))).time()),
-                                              rand_bucket_bounds_width=random.randint(self.config['trade_config']['rand_bucket_low'],
-                                                                                      self.config['trade_config']['rand_bucket_high']),  # % of the bucket_size
+        # Randomize inputs to the execution algo
+        if self.reset_counter >= self.config['reset_config']['reset_num_episodes'] or self.reset_counter == 0:
+            self.start_time, self.exec_time, self.volume, self.no_of_slices, \
+                self.trade_dir, self.rand_bucket_bounds_width, self.bucket_func = self._reset_exec_params()
+            self.reset_counter = 0
+        self.reset_counter += 1
+
+        # instantiate benchark algo
+        self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.trade_dir,
+                                              volume=self.volume,
+                                              no_of_slices=self.no_of_slices,
+                                              bucket_placement_func=self.bucket_func,
+                                              start_time=self.start_time,
+                                              end_time=str((datetime.strptime(self.start_time, '%H:%M:%S') +
+                                                            timedelta(minutes=self.exec_time)).time()),
+                                              rand_bucket_bounds_width=self.rand_bucket_bounds_width,
                                               broker_data_feed=self.broker.data_feed)
+
         # reset the broker with the new benchmark_algo
-
-        self.broker.reset(self.broker.benchmark_algo,)
-
-        # simulate the benchmark algo and declare the RLAlgo
-        # self.broker.simulate_algo(self.broker.benchmark_algo)
+        self.broker.reset(self.broker.benchmark_algo)
 
         # Declare the RLAlgo
         self.broker.rl_algo = RLAlgo(benchmark_algo=self.broker.benchmark_algo,
@@ -118,7 +112,8 @@ class BaseEnv(gym.Env, ABC):
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
 
-        self.state = self.build_observation_at_event(event_time = self.broker.benchmark_algo.algo_events[0].strftime('%H:%M:%S'))
+        self.state = self.build_observation_at_event(
+            event_time=self.broker.benchmark_algo.algo_events[0].strftime('%H:%M:%S'))
         self.reward = 0
         self.done = False
         self.info = {}
@@ -126,6 +121,46 @@ class BaseEnv(gym.Env, ABC):
         self.ui_epoch += 1
 
         return self.state
+
+    def _reset_exec_params(self):
+        """ Used for defining random execution parameters. """
+
+        start_time = '{}:{}:{}'.format(random.randint(self.config['start_config']['hour_low'],
+                                                      self.config['start_config']['hour_high']),
+                                       random.randint(self.config['start_config']['minute_low'],
+                                                      self.config['start_config']['hour_high']),
+                                       random.randint(self.config['start_config']['second_low'],
+                                                      self.config['start_config']['second_high']))
+        start_time = str(datetime.strptime(start_time, '%H:%M:%S').time())
+
+        if isinstance(self.config['exec_config']['exec_times'], list):
+            exec_time, volume, no_of_slices = self._reset_volume_and_slices()
+        else:
+            exec_time = self.config['exec_config']['exec_times']
+            volume = random.randint(self.config['trade_config']['vol_low'],
+                                    self.config['trade_config']['vol_high'])
+            no_of_slices = random.randint(self.config['trade_config']['no_slices_low'],
+                                          self.config['trade_config']['no_slices_high'])
+
+        trade_dir = self.config['trade_config']['trade_direction']
+        rand_bucket_bounds_width = random.randint(self.config['trade_config']['rand_bucket_low'],
+                                                  self.config['trade_config']['rand_bucket_high'])
+        bucket_func = self.config['trade_config']['bucket_func']
+
+        return start_time, exec_time, volume, no_of_slices, trade_dir, rand_bucket_bounds_width, bucket_func
+
+    def _reset_volume_and_slices(self):
+        """ May deserve own method since its most important part of resetting/can be easily overridden. """
+
+        exec_time = random.choice(self.config['exec_config']['exec_times'])
+        perc = exec_time / (max(self.config['exec_config']['exec_times']) -
+                            min(self.config['exec_config']['exec_times']))
+        volume = round(self.config['trade_config']['vol_low'] + perc * (self.config['trade_config']['vol_high'] -
+                                                                        self.config['trade_config']['vol_low']))
+        no_of_slices = round(self.config['trade_config']['no_slices_low'] +
+                             perc * (self.config['trade_config']['no_slices_high'] -
+                                     self.config['trade_config']['no_slices_low']))
+        return exec_time, volume, no_of_slices
 
     def _convert_action(self, action):
         """ Used if actions need to be transformed without having to change entire step() method """
@@ -139,15 +174,17 @@ class BaseEnv(gym.Env, ABC):
         # convert action if necessary
         action = self._convert_action(action)
 
-        self.broker.rl_algo.event_idx += 1 # The event_idx of the rl_algo during stepping is only updated on order placements,
+        self.broker.rl_algo.event_idx += 1
+        # The event_idx of the rl_algo during stepping is only updated on order placements,
         # not on bucket ends, during simulation it will be reset to 0 and then updated on both.
 
-        #Update the volume the RLAlgo has chosen for the order
+        # Update the volume the RLAlgo has chosen for the order
         vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         vol_to_trade = round(vol_to_trade, 3)
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
             vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = vol_to_trade
+        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = \
+            vol_to_trade
         self.broker.rl_algo.order_idx += 1
 
         # update the remaining bucket vol
@@ -160,54 +197,18 @@ class BaseEnv(gym.Env, ABC):
             self.broker.rl_algo.order_idx = 0
 
         # Check if we are at the end of an episode:
-        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
+        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - \
+                self.broker.rl_algo.buckets.n_buckets:
             # self.calc_reward('episode')
             self.done = True
         else:
             # Go to the next event otherwise
-            self.state = self.build_observation_at_event(event_time = self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
+            self.state = self.build_observation_at_event(
+                event_time=self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
 
         self.info = {}
 
         return self.state, self.reward, self.done, self.info
-
-    def render(self, mode='human'):
-
-        ##
-        #### send ONLY plain python list with primitives (floats or ints) ####
-        ##
-
-        if self.ui is None:
-            self.ui = UIServer()
-
-        pxs = []
-        for d in self.mid_pxs:
-            pxs.append(float(d))
-
-        lvls = []
-        for _ in range(int(len(pxs) / 2)):
-            lvls.append(float(self.broker.benchmark_algo.bmk_vwap))
-
-        for _ in range(int(len(pxs) / 2)):
-            lvls.append(float(self.broker.rl_algo.rl_vwap))
-
-        timeseries_data = [
-            {
-                "event": "{}#{}".format(Charts.CHART_0, "0"),
-                "data": pxs
-            },
-            {
-                "event": "{}#{}".format(Charts.CHART_0, "1"),
-                "data": lvls
-            },
-            {
-                "event": "{}#{}".format(Charts.CHART_1, "0"),
-                "data": lvls
-            },
-        ]
-
-        self.ui.send_rendering_data(rl_session_epoch=self.ui_epoch,
-                                    data=timeseries_data)
 
     def build_observation_space(self):
 
@@ -216,11 +217,11 @@ class BaseEnv(gym.Env, ABC):
 
         nr_of_lobs : int, Number of past snapshots to be concatenated to the latest snapshot
         lob_depth : int, Depth of the LOB to be in each snapshot (max lob_depth = 20 )
-        norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask spread --
+        norm : Boolean, normalize or not -- We take the strike price to normalize with as the middle of the bid/ask
+        spread --
         """
 
-        n_obs_onesided = self.config['obs_config']['lob_depth'] * \
-                         self.config['obs_config']['nr_of_lobs']
+        n_obs_onesided = self.config['obs_config']['lob_depth'] * self.config['obs_config']['nr_of_lobs']
         zeros = np.zeros(n_obs_onesided)
         ones = np.ones(n_obs_onesided)
 
@@ -237,7 +238,7 @@ class BaseEnv(gym.Env, ABC):
         high = np.concatenate((ones*np.inf, ones*np.inf,
                                ones*np.inf, ones*np.inf,
                                np.array([np.inf]),
-                               np.array([np.inf])), axis= 0)
+                               np.array([np.inf])), axis=0)
 
         obs_space_n = (n_obs_onesided * 4 + 2)
         assert low.shape[0] == high.shape[0] == obs_space_n
@@ -269,12 +270,12 @@ class BaseEnv(gym.Env, ABC):
             vol_bid = self.broker.hist_dict['rl_lob'][-1].bids.volume
             vol_ask = self.broker.hist_dict['rl_lob'][-1].asks.volume
             for lob in self.broker.hist_dict['rl_lob'][-self.config['obs_config']['nr_of_lobs']:]:
-                #TODO: Right now both prices and volumes are normalized, however we show the agent the unnormalized volume, wouldn't it make more sense to not normalize the volume so that it can find the relationship between those quantities?
+                # TODO: Right now both prices and volumes are normalized, however we show the agent the unnormalized volume, wouldn't it make more sense to not normalize the volume so that it can find the relationship between those quantities?
                 obs = np.concatenate((obs, lob_to_numpy(lob,
-                                                   depth=self.config['obs_config']['lob_depth'],
-                                                   norm_price=mid,
-                                                   norm_vol_bid=None,
-                                                   norm_vol_ask=None)), axis=0)
+                                                        depth=self.config['obs_config']['lob_depth'],
+                                                        norm_price=mid,
+                                                        norm_vol_bid=None,
+                                                        norm_vol_ask=None)), axis=0)
             obs = np.concatenate((obs, np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),#vol left to trade in the bucket
                                   np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx -1])), axis=0)# orders left to place in the bucket
         else:
@@ -349,6 +350,44 @@ class BaseEnv(gym.Env, ABC):
     @staticmethod
     def add_default_dict(config):
         return {**DEFAULT_ENV_CONFIG, **config}
+
+    def render(self, mode='human'):
+
+        ##
+        #### send ONLY plain python list with primitives (floats or ints) ####
+        ##
+
+        if self.ui is None:
+            self.ui = UIServer()
+
+        pxs = []
+        for d in self.mid_pxs:
+            pxs.append(float(d))
+
+        lvls = []
+        for _ in range(int(len(pxs) / 2)):
+            lvls.append(float(self.broker.benchmark_algo.bmk_vwap))
+
+        for _ in range(int(len(pxs) / 2)):
+            lvls.append(float(self.broker.rl_algo.rl_vwap))
+
+        timeseries_data = [
+            {
+                "event": "{}#{}".format(Charts.CHART_0, "0"),
+                "data": pxs
+            },
+            {
+                "event": "{}#{}".format(Charts.CHART_0, "1"),
+                "data": lvls
+            },
+            {
+                "event": "{}#{}".format(Charts.CHART_1, "0"),
+                "data": lvls
+            },
+        ]
+
+        self.ui.send_rendering_data(rl_session_epoch=self.ui_epoch,
+                                    data=timeseries_data)
 
 
 if __name__ == '__main__':

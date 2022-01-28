@@ -57,7 +57,7 @@ class Broker(ABC):
         self.trade_logs = {'benchmark_algo': [],
                            'rl_algo': []}
 
-    def reset(self, algo,):
+    def reset(self, algo):
         """ Resetting the Broker class """
 
         # reset the Broker logs
