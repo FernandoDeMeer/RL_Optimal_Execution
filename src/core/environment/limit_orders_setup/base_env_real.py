@@ -211,7 +211,7 @@ class BaseEnv(gym.Env, ABC):
         return self.state, self.reward, self.done, self.info
 
     def infer_volume_from_action(self, action):
-        """ Logic for inferring the volum from the action placed in the env """
+        """ Logic for inferring the volume from the action placed in the env """
 
         vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         vol_to_trade = round(vol_to_trade, 3)
@@ -409,7 +409,7 @@ if __name__ == '__main__':
         print(seed)
         random.seed(a= seed)
         # define the datafeed
-        dir = '../../../../'
+        dir = '../../../'
         lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data/market/btcusdt/'),
                                       instrument='btc_usdt',
                                       samples_per_file=200)
