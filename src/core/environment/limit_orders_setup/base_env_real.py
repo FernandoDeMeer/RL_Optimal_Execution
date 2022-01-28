@@ -168,8 +168,7 @@ class BaseEnv(gym.Env, ABC):
 
     def step(self, action):
 
-        assert self.done is False, (
-            'reset() must be called before step()')
+        assert self.done is False, 'reset() must be called before step()'
 
         # convert action if necessary
         action = self._convert_action(action)
@@ -179,12 +178,7 @@ class BaseEnv(gym.Env, ABC):
         # not on bucket ends, during simulation it will be reset to 0 and then updated on both.
 
         # Update the volume the RLAlgo has chosen for the order
-        vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        vol_to_trade = round(vol_to_trade, 3)
-        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
-            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = \
-            vol_to_trade
+        vol_to_trade = self.infer_volume_from_action(action)
         self.broker.rl_algo.order_idx += 1
 
         # update the remaining bucket vol
@@ -195,7 +189,7 @@ class BaseEnv(gym.Env, ABC):
         
         # check if we are at the end of a bucket
         if self.broker.rl_algo.event_idx % self.broker.rl_algo.no_of_slices == 0:
-            self.calc_reward('bucket') # Comment this out if calculating rewards at the end of the execution.
+            self.calc_reward('bucket')  # Comment this out if calculating rewards at the end of the execution.
             self.broker.rl_algo.bucket_idx += 1
             self.broker.rl_algo.order_idx = 0
 
@@ -215,6 +209,17 @@ class BaseEnv(gym.Env, ABC):
         self.info = {}
 
         return self.state, self.reward, self.done, self.info
+
+    def infer_volume_from_action(self, action):
+        """ Logic for inferring the volum from the action placed in the env """
+
+        vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        vol_to_trade = round(vol_to_trade, 3)
+        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
+            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = \
+            vol_to_trade
+        return vol_to_trade
 
     def build_observation_space(self):
 
