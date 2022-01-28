@@ -155,7 +155,7 @@ class Broker(ABC):
                 if order_temp_bmk['side'] == 'bid' and order_temp_bmk['price'] < lob_bmk.get_best_bid():
                     order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
                 if order_temp_bmk['side'] == 'ask' and order_temp_bmk['price'] > lob_bmk.get_best_ask():
-                    order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size()
+                    order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size
             self.remaining_order['benchmark_algo'] = []
 
         if len(self.remaining_order['rl_algo']) != 0:
@@ -168,7 +168,7 @@ class Broker(ABC):
                 if order_temp_rl['side'] == 'bid' and order_temp_rl['price'] < lob_rl.get_best_bid():
                     order_temp_rl['price'] = lob_rl.get_best_bid() - self.benchmark_algo.tick_size
                 if order_temp_rl['side'] == 'ask' and order_temp_rl['price'] > lob_rl.get_best_ask():
-                    order_temp_rl['price'] = lob_rl.get_best_ask() + self.benchmark_algo.tick_size()
+                    order_temp_rl['price'] = lob_rl.get_best_ask() + self.benchmark_algo.tick_size
             self.remaining_order['rl_algo'] = []
         return order_temp_bmk, order_temp_rl
 
@@ -309,36 +309,3 @@ class Broker(ABC):
         # unexecuted_rl_vol_percent= float(bucket_rl_algo.bucket_vol_remaining[0])/float(self.rl_algo.bucket_volumes[self.rl_algo.bucket_idx])
 
         return bmk_bucket_vwap, rl_bucket_vwap
-
-if __name__ == '__main__':
-
-    import random
-    import os
-    from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
-    from src.data.historical_data_feed import HistoricalDataFeed
-
-    # define the benchmark algo
-    algo = TWAPAlgo(trade_direction=1,
-                    volume=500,
-                    start_time='08:35:05',
-                    end_time='09:00:00',
-                    no_of_slices=3,
-                    bucket_placement_func=lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for i in range(no_of_slices)])))
-
-    # define the datafeed
-    dir = '/'
-    # dir = 'C:\\Users\\auth\\projects\\python\\reinforcement learning\\RLOptimalTradeExecution'
-    lob_feed = HistoricalDataFeed(data_dir=os.path.join(dir, 'data_dir'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
-
-    # define the broker class
-    broker = Broker(lob_feed)
-    broker.simulate_algo(algo)
-    broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
-
-
-
-
-
-
