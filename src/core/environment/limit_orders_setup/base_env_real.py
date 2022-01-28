@@ -1,14 +1,13 @@
-import os
 import random
 import gym
 import numpy as np
+
 from datetime import datetime, timedelta
 from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
+
 from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo, RLAlgo
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.data.historical_data_feed import HistoricalDataFeed
 from src.ui.ui_comm import UIServer
 from src.ui.ui_comm import Charts as Charts
 
