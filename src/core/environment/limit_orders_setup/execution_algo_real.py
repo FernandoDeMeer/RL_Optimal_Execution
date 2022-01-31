@@ -142,7 +142,7 @@ class ExecutionAlgo:
         self.rand_bucket_bounds_width = rand_bucket_bounds_width
         self.broker_data_feed = broker_data_feed
 
-    def reset(self,):
+    def reset(self):
         if type(self).__name__ != 'RLAlgo':
             self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
         self.vol_remaining = Decimal(str(self.volume))
@@ -189,9 +189,9 @@ class ExecutionAlgo:
         if trade_id is None:
             trade_id = 1
         if self.trade_direction == 1:
-            side = 'ask'
-        else:
             side = 'bid'
+        else:
+            side = 'ask'
 
         if event['type'] == 'order_placement':
             # place a limit order at best bid/ask -/+ 1 tick
