@@ -50,9 +50,8 @@ class Broker(ABC):
         self.data_feed = data_feed
         self.benchmark_algo = None
         self.rl_algo = None
-        self.hist_dict = {'timestamp': [],
-                          'benchmark_lob': [],
-                          'rl_lob': []}
+        self.hist_dict = {'benchmark': {'timestamp': [], 'lob': []},
+                          'rl': {'timestamp': [], 'lob': []}}
         self.remaining_order = {'benchmark_algo': [],
                                 'rl_algo': []}
         self.trade_logs = {'benchmark_algo': [],
@@ -63,13 +62,13 @@ class Broker(ABC):
 
         # reset the Broker logs
         if type(algo).__name__ != 'RLAlgo':
-            self.hist_dict['timestamp'] = []
-            self.hist_dict['benchmark_lob'] = []
+            self.hist_dict['benchmark']['timestamp'] = []
+            self.hist_dict['benchmark']['lob'] = []
             self.remaining_order['benchmark_algo'] = []
             self.trade_logs['benchmark_algo']= []
         else:
-            self.hist_dict['timestamp'] = []
-            self.hist_dict['rl_lob'] = []
+            self.hist_dict['rl']['timestamp'] = []
+            self.hist_dict['rl']['lob'] = []
             self.remaining_order['rl_algo'] = []
             self.trade_logs['rl_algo'] = []
 
@@ -81,7 +80,7 @@ class Broker(ABC):
 
         self._record_lob(dt, lob, algo)
 
-    def _simulate_to_next_order(self,algo):
+    def _simulate_to_next_order(self, algo):
         """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
          remaining orders.
          """
@@ -89,23 +88,22 @@ class Broker(ABC):
         # get info from the algo about the type and time of next event
         event, done = algo.get_next_event()
 
-        if len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+        if len(self.remaining_order['benchmark_algo']) != 0 or len(self.remaining_order['rl_algo']) != 0:
             # If we have remaining orders go through the LOBs until they are executed
-            while len(self.remaining_order['benchmark_algo'])!=0 or len(self.remaining_order['rl_algo'])!=0:
+            while len(self.remaining_order['benchmark_algo']) != 0 or len(self.remaining_order['rl_algo']) != 0:
                 # Loop through the LOBs
                 dt, lob = self.data_feed.next_lob_snapshot()
                 self._record_lob(dt, lob, algo)
-                if self.hist_dict['timestamp'][-1] < event['time']:
+                if dt < event['time']:
                     order_temp_bmk, order_temp_rl = self._update_remaining_orders()
 
                     # place the orders and update the remaining quantities to trade in the algo
                     if type(algo).__name__ != 'RLAlgo':
-                        log = self.place_orders(order_temp_bmk,type(algo).__name__)
+                        log = self.place_orders(order_temp_bmk, type(algo).__name__)
                         algo.update_remaining_volume(log)
                     else:
-                        log = self.place_orders(order_temp_rl,type(algo).__name__)
+                        log = self.place_orders(order_temp_rl, type(algo).__name__)
                         algo.update_remaining_volume(log)
-
                 else:
                     # We have reached the next event with unexecuted volume, if we are not at the end of a bucket
                     # we add it to the volume of next order
@@ -128,27 +126,28 @@ class Broker(ABC):
         dt, lob = self.data_feed.next_lob_snapshot()
         self._record_lob(dt, lob, algo)
 
-        return event, done
+        return event, done, lob
 
     def _record_lob(self, dt, lob, algo):
         """ Records lob steps in a dict """
 
         if type(algo).__name__ != 'RLAlgo':
-            self.hist_dict['timestamp'].append(dt)
-            self.hist_dict['benchmark_lob'].append(copy.deepcopy(lob))
+            self.hist_dict['benchmark']['timestamp'].append(dt)
+            self.hist_dict['benchmark']['lob'].append(copy.deepcopy(lob))
         else:
-            self.hist_dict['timestamp'].append(dt)
-            self.hist_dict['rl_lob'].append(copy.deepcopy(lob))
+            self.hist_dict['rl']['timestamp'].append(dt)
+            self.hist_dict['rl']['lob'].append(copy.deepcopy(lob))
 
     def _update_remaining_orders(self):
         """ Updates the orders not previously executed with new LOB data """
 
         order_temp_bmk = None
         order_temp_rl = None
-        dt = self.hist_dict['timestamp'][-1]
+
         if len(self.remaining_order['benchmark_algo']) != 0:
             # update the order and place it
-            lob_bmk = self.hist_dict['benchmark_lob'][-1]
+            dt = self.hist_dict['benchmark']['timestamp'][-1]
+            lob_bmk = self.hist_dict['benchmark']['lob'][-1]
             order_temp_bmk = self.remaining_order['benchmark_algo'][0]
             order_temp_bmk['timestamp'] = datetime.strftime(dt, '%Y-%m-%d %H:%M:%S.%f')
             if order_temp_bmk['type'] == 'limit':
@@ -161,7 +160,8 @@ class Broker(ABC):
 
         if len(self.remaining_order['rl_algo']) != 0:
             # update the order and place it
-            lob_rl = self.hist_dict['rl_lob'][-1]
+            dt = self.hist_dict['rl']['timestamp'][-1]
+            lob_rl = self.hist_dict['rl']['lob'][-1]
             order_temp_rl = self.remaining_order['rl_algo'][0]
             order_temp_rl['timestamp'] = datetime.strftime(dt, '%Y-%m-%d %H:%M:%S.%f')
             if order_temp_rl['type'] == 'limit':
@@ -178,10 +178,10 @@ class Broker(ABC):
 
         # update the remaining orders
         if algo_type != 'RLAlgo':
-            input_lob = copy.deepcopy(self.hist_dict['benchmark_lob'][-1])
-            log = place_order(input_lob,
-                                  self.hist_dict['timestamp'][-1],
-                                  order)
+            # input_lob = copy.deepcopy(self.hist_dict['benchmark_lob'][-1])
+            log = place_order(self.hist_dict['benchmark']['lob'][-1],
+                              self.hist_dict['benchmark']['timestamp'][-1],
+                              order)
             if log is not None:
                 self.trade_logs['benchmark_algo'].append(log)
                 bmk_order_temp = order.copy()
@@ -192,10 +192,10 @@ class Broker(ABC):
                     self.remaining_order['benchmark_algo'] = []
 
         if algo_type == 'RLAlgo':
-            input_lob = copy.deepcopy(self.hist_dict['rl_lob'][-1])
-            log = place_order(input_lob,
-                                 self.hist_dict['timestamp'][-1],
-                                 order)
+            # input_lob = copy.deepcopy(self.hist_dict['rl_lob'][-1])
+            log = place_order(self.hist_dict['rl']['lob'][-1],
+                              self.hist_dict['rl']['timestamp'][-1],
+                              order)
             if log is not None:
                 self.trade_logs['rl_algo'].append(log)
                 rl_order_temp = order.copy()
@@ -213,17 +213,14 @@ class Broker(ABC):
         done = False
         while not done:
             # get next event and order from this
-            event, done = self._simulate_to_next_order(algo)
-            if type(algo).__name__ != 'RLAlgo':
-                algo_order = algo.get_order_at_event(event, self.hist_dict['benchmark_lob'][-1])
-            else:
-                algo_order = algo.get_order_at_event(event, self.hist_dict['rl_lob'][-1])
+            event, done, lob = self._simulate_to_next_order(algo)
+            algo_order = algo.get_order_at_event(event, lob)
             log = self.place_orders(algo_order, type(algo).__name__)
 
             # update the remaining quantities to trade
             algo.update_remaining_volume(log, event['type'])
 
-            if len(self.remaining_order['benchmark_algo'])!= 0:
+            if len(self.remaining_order['benchmark_algo']) != 0:
                 if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
                     # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
                     while len(self.remaining_order['benchmark_algo'])!= 0:
