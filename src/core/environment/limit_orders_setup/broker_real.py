@@ -22,11 +22,11 @@ def place_order(lob, dt, order):
     trade_message = None
     if ord['quantity'] > 0:
         if ord['type'] == 'limit':
-            lob_temp = copy.deepcopy(lob)
-            trades, _ = lob_temp.process_order(ord, False, False)
+            # lob_temp = copy.deepcopy(lob)
+            trades, _ = lob.process_order(ord, False, False)
         else:
-            lob_temp = copy.deepcopy(lob)
-            trades, _ = lob_temp.process_order(ord, True, False)
+            # lob_temp = copy.deepcopy(lob)
+            trades, _ = lob.process_order(ord, True, False)
         if trades:
             vol_wgt_price, vol = calc_volume_weighted_price_from_trades(trades)
             msg = 'trade'
