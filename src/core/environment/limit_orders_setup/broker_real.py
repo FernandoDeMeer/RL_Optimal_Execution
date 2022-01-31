@@ -31,7 +31,7 @@ def place_order(lob, dt, order):
             vol_wgt_price, vol = calc_volume_weighted_price_from_trades(trades)
             msg = 'trade'
         else:
-            vol_wgt_price, vol, msg = 0, 0, 'no_trade'
+            vol_wgt_price, vol, msg = order['price'], 0, 'no_trade'
         trade_message = {'timestamp': datetime.strftime(dt, '%Y-%m-%d %H:%M:%S.%f'),
                          'message': msg,
                          'type': order['type'],
