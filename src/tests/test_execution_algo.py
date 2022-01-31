@@ -34,8 +34,12 @@ class FakeLOBGenerator:
         self.time = datetime.strptime(time, '%H:%M:%S')
 
 
-class TestExecutionAlgo(unittest.TestCase):
+class RLAlgo(TWAPAlgo):
+    def __init__(self, *args, **kwargs):
+        super(RLAlgo, self).__init__(*args, **kwargs)
 
+
+class TestExecutionAlgo(unittest.TestCase):
     fake_lob = FakeLOBGenerator()
 
     # define the benchmark algo
@@ -52,10 +56,22 @@ class TestExecutionAlgo(unittest.TestCase):
     broker.benchmark_algo = algo
     broker.simulate_algo(algo)
 
+    rl_algo = RLAlgo(trade_direction=1,
+                     volume=50,
+                     start_time='09:00:00',
+                     end_time='09:01:00',
+                     no_of_slices=1,
+                     bucket_placement_func=lambda no_of_slices: 0.5,
+                     broker_data_feed=fake_lob)
+
+    # define the broker class
+    broker.rl_algo = rl_algo
+    broker.simulate_algo(rl_algo)
+
     def test_buckets(self):
         # check if we divide this correctly into correct bucket numbers and volume placed
         self.assertEqual(len(self.broker.benchmark_algo.bucket_volumes),
-                         np.ceil(60/BUCKET_SIZES_IN_SECS["1m"]),
+                         np.ceil(60 / BUCKET_SIZES_IN_SECS["1m"]),
                          'Bucket length not as expected')
         self.assertEqual(float(sum(self.broker.benchmark_algo.bucket_volumes)),
                          25,
@@ -100,34 +116,99 @@ class TestExecutionAlgo(unittest.TestCase):
         self.assertEqual(t_next.second, 10, 'First order at second bucket is incorrect')
 
     def test_stored_history(self):
-        trades = [len(self.broker.hist_dict['benchmark_lob'][i].tape)
-                  for i in range(len(self.broker.hist_dict['benchmark_lob']))]
-        self.assertNotEqual(sum(trades), 0, 'Benchmark history does not store any trades')
+        if len(self.broker.hist_dict['benchmark']['lob']) > 0:
+            trades = [len(self.broker.hist_dict['benchmark']['lob'][i].tape)
+                      for i in range(len(self.broker.hist_dict['benchmark']['lob']))]
+            self.assertNotEqual(sum(trades), 0, 'Benchmark history does not store any trades')
+        if len(self.broker.hist_dict['rl']['lob']) > 0:
+            trades = [len(self.broker.hist_dict['rl']['lob'][i].tape)
+                      for i in range(len(self.broker.hist_dict['rl']['lob']))]
+            self.assertNotEqual(sum(trades), 0, 'RL history does not store any trades')
 
     def test_bug(self):
-        class RLAlgo(TWAPAlgo):
-            def __init__(self, *args, **kwargs):
-                super(RLAlgo, self).__init__(*args, **kwargs)
 
-        rl_algo = RLAlgo(trade_direction=1,
-                         volume=50,
-                         start_time='09:00:00',
-                         end_time='09:01:00',
-                         no_of_slices=1,
-                         bucket_placement_func=lambda no_of_slices: 0.5,
-                         broker_data_feed=self.fake_lob)
-
-        # define the broker class
-        self.broker.rl_algo = rl_algo
-        self.broker.simulate_algo(rl_algo)
-
-        length_rl_times = len(self.broker.hist_dict['timestamp'])
-        length_rl_lobs = len(self.broker.hist_dict['rl_lob'])
-        length_bmk_lobs = len(self.broker.hist_dict['benchmark_lob'])
+        length_bmk_times = len(self.broker.hist_dict['benchmark']['timestamp'])
+        length_bmk_lobs = len(self.broker.hist_dict['benchmark']['lob'])
+        length_rl_times = len(self.broker.hist_dict['rl']['timestamp'])
+        length_rl_lobs = len(self.broker.hist_dict['rl']['lob'])
 
         # length of timesteps doesnt match anymore with rl and bmk algo...
+        self.assertEqual(length_bmk_times, length_bmk_lobs, 'Timestamps and stored LOBs do not match anymore')
         self.assertEqual(length_rl_times, length_rl_lobs, 'Timestamps and stored LOBs do not match anymore')
-        self.assertEqual(length_rl_times, length_bmk_lobs, 'Timestamps and stored LOBs do not match anymore')
+        self.assertNotEqual(length_bmk_lobs, length_rl_lobs, 'RL history should be longer than Bmk')
+
+
+class TestExecutionLogic(unittest.TestCase):
+
+    def test_large_market_order(self):
+        """ tests what happens if market orders are so large that they eat into the next order """
+
+        fake_lob = FakeLOBGenerator()
+
+        # define the benchmark algo
+        algo = TWAPAlgo(trade_direction=1,
+                        volume=1000,
+                        start_time='09:00:00',
+                        end_time='09:01:00',
+                        no_of_slices=1,
+                        bucket_placement_func=lambda no_of_slices: 0.99,
+                        broker_data_feed=fake_lob)
+
+        # define the broker class
+        broker = Broker(fake_lob)
+        broker.benchmark_algo = algo
+        broker.simulate_algo(algo)
+
+        dts = [trade['timestamp'] for trade in broker.trade_logs['benchmark_algo']]
+        res = all(i < j for i, j in zip(dts, dts[1:]))
+        self.assertEqual(res, True, 'Overlapping trades detected')
+
+    def test_same_limit_order_timestamps(self):
+        """ tests what happens if limit orders are extremely close to each other """
+
+        fake_lob = FakeLOBGenerator()
+
+        # define the benchmark algo
+        algo = TWAPAlgo(trade_direction=1,
+                        volume=25,
+                        start_time='09:00:00',
+                        end_time='09:01:00',
+                        no_of_slices=2,
+                        bucket_placement_func=lambda no_of_slices: [0.5, 0.6],
+                        broker_data_feed=fake_lob)
+
+        # define the broker class
+        broker = Broker(fake_lob)
+        broker.benchmark_algo = algo
+        broker.simulate_algo(algo)
+
+        dts = [trade['timestamp'] for trade in broker.trade_logs['benchmark_algo']]
+        res = all(i < j for i, j in zip(dts, dts[1:]))
+        self.assertEqual(res, True, 'Overlapping trades detected')
+
+    def test_close_limit_orders(self):
+        """ tests what happens if limit orders are extremely close to each other """
+
+        fake_lob = FakeLOBGenerator()
+
+        # define the benchmark algo
+        algo = TWAPAlgo(trade_direction=1,
+                        volume=25,
+                        start_time='09:00:00',
+                        end_time='09:01:00',
+                        no_of_slices=2,
+                        bucket_placement_func=lambda no_of_slices: [0.5, 0.8],
+                        broker_data_feed=fake_lob)
+
+        # define the broker class
+        broker = Broker(fake_lob)
+        broker.benchmark_algo = algo
+        broker.simulate_algo(algo)
+
+        dts = [trade['timestamp'] for trade in broker.trade_logs['benchmark_algo']]
+        res = all(i < j for i, j in zip(dts, dts[1:]))
+        # why are there 2 trades at 9:00:05 ??
+        self.assertEqual(res, True, 'Overlapping trades detected')
 
 
 if __name__ == '__main__':
