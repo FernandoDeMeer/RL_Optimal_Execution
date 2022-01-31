@@ -102,6 +102,3 @@ class TestExecutionAlgo(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-    # plot the executed trades against the trades from the original schedule...
-    # broker.benchmark_algo.plot_schedule(broker.trade_logs['benchmark_algo'])
