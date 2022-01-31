@@ -35,6 +35,7 @@ def place_order(lob, dt, order):
         trade_message = {'timestamp': datetime.strftime(dt, '%Y-%m-%d %H:%M:%S.%f'),
                          'message': msg,
                          'type': order['type'],
+                         'side': order['side'],
                          'price': vol_wgt_price,
                          'quantity': Decimal(str(vol)),
                          'target_quantity': order['quantity']}
