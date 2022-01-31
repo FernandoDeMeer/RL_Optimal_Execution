@@ -210,6 +210,45 @@ class TestExecutionLogic(unittest.TestCase):
         # why are there 2 trades at 9:00:05 ??
         self.assertEqual(res, True, 'Overlapping trades detected')
 
+    def test_correct_execution_price(self):
+
+        fake_lob = FakeLOBGenerator()
+
+        # define the benchmark algo
+        algo = TWAPAlgo(trade_direction=1,
+                        volume=25,
+                        start_time='09:00:00',
+                        end_time='09:01:00',
+                        no_of_slices=1,
+                        bucket_placement_func=lambda no_of_slices: 0.5,
+                        broker_data_feed=fake_lob)
+
+        # define the broker class
+        broker = Broker(fake_lob)
+        broker.benchmark_algo = algo
+        broker.simulate_algo(algo)
+
+        traded_volumes_per_time = [float(ts['quantity']) for ts in broker.trade_logs['benchmark_algo']]
+        achieved_prices_per_time = [float(ts['price']) for ts in broker.trade_logs['benchmark_algo']]
+        vwap_ours = np.dot(achieved_prices_per_time, traded_volumes_per_time) / sum(traded_volumes_per_time)
+
+        # check that trades in the LOB logs match with our generated logs
+        vwap_list = []
+        vol_list = []
+        for i in range(len(broker.hist_dict['benchmark']['lob'])):
+            tp = broker.hist_dict['benchmark']['lob'][i].tape
+            if len(tp) > 0:
+                vol = 0
+                vwap = 0
+                for id in range(len(tp)):
+                    vol += tp[id]['quantity']
+                    vwap += tp[id]['quantity'] * tp[id]['price']
+                vwap = float(vwap) / float(vol)
+                vwap_list.append(vwap)
+                vol_list.append(float(vol))
+        vwap_derived = np.dot(vwap_list, vol_list) / sum(vol_list)
+        self.assertEqual(vwap_ours, vwap_derived, 'VWAPS are not matching')
+
 
 if __name__ == '__main__':
     unittest.main()
