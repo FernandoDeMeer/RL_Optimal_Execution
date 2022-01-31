@@ -31,6 +31,8 @@ def split_across_buckets(quantity, n_splits, ticks):
 
 def _get_execution_times(algo, idx):
     sample_placements = algo.bucket_placement_func(algo.no_of_slices)
+    if not isinstance(sample_placements, list):
+        sample_placements = [sample_placements]
     t_diff = algo.buckets.bucket_bounds[idx + 1] - algo.buckets.bucket_bounds[idx]
     bucket_trades = [algo.buckets.bucket_bounds[idx] + t_diff * plcmt for plcmt in sample_placements]
     return bucket_trades
@@ -140,7 +142,6 @@ class ExecutionAlgo:
         self.rand_bucket_bounds_width = rand_bucket_bounds_width
         self.broker_data_feed = broker_data_feed
 
-
     def reset(self,):
         if type(self).__name__ != 'RLAlgo':
             self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
@@ -188,9 +189,9 @@ class ExecutionAlgo:
         if trade_id is None:
             trade_id = 1
         if self.trade_direction == 1:
-            side = 'bid'
-        else:
             side = 'ask'
+        else:
+            side = 'bid'
 
         if event['type'] == 'order_placement':
             # place a limit order at best bid/ask -/+ 1 tick
@@ -292,7 +293,6 @@ class ExecutionAlgo:
 class TWAPAlgo(ExecutionAlgo):
     """ Implementation of a TWAP Execution Algo based on the base algo logic """
 
-
     def __init__(self, *args, **kwargs):
         super(TWAPAlgo, self).__init__(*args, **kwargs)
         # get the tick size implied by LOB data_feed
@@ -319,8 +319,6 @@ class TWAPAlgo(ExecutionAlgo):
         # if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
         #     raise ValueError("Volumes split across orders didn't work out!")
         self.bmk_vwap = 0
-
-
 
     def _split_volume_across_buckets(self):
         """ Aims to split volume across buckets as equal as possible """
@@ -349,6 +347,7 @@ class TWAPAlgo(ExecutionAlgo):
         self.volumes_per_trade = split_vols
         self.volumes_per_trade_default = copy.deepcopy(split_vols)
 
+
 class RLAlgo(ExecutionAlgo):
     """ Implementation of a RL Execution Algo class to use with the Broker """
 
@@ -373,6 +372,3 @@ class RLAlgo(ExecutionAlgo):
         self.order_idx = 0
         self.bucket_idx = 0
         self.rl_vwap = 0
-
-
-
