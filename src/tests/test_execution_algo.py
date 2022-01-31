@@ -99,6 +99,36 @@ class TestExecutionAlgo(unittest.TestCase):
                                    '%Y-%m-%d %H:%M:%S.%f').time()
         self.assertEqual(t_next.second, 10, 'First order at second bucket is incorrect')
 
+    def test_stored_history(self):
+        trades = [len(self.broker.hist_dict['benchmark_lob'][i].tape)
+                  for i in range(len(self.broker.hist_dict['benchmark_lob']))]
+        self.assertNotEqual(sum(trades), 0, 'Benchmark history does not store any trades')
+
+    def test_bug(self):
+        class RLAlgo(TWAPAlgo):
+            def __init__(self, *args, **kwargs):
+                super(RLAlgo, self).__init__(*args, **kwargs)
+
+        rl_algo = RLAlgo(trade_direction=1,
+                         volume=50,
+                         start_time='09:00:00',
+                         end_time='09:01:00',
+                         no_of_slices=1,
+                         bucket_placement_func=lambda no_of_slices: 0.5,
+                         broker_data_feed=self.fake_lob)
+
+        # define the broker class
+        self.broker.rl_algo = rl_algo
+        self.broker.simulate_algo(rl_algo)
+
+        length_rl_times = len(self.broker.hist_dict['timestamp'])
+        length_rl_lobs = len(self.broker.hist_dict['rl_lob'])
+        length_bmk_lobs = len(self.broker.hist_dict['benchmark_lob'])
+
+        # length of timesteps doesnt match anymore with rl and bmk algo...
+        self.assertEqual(length_rl_times, length_rl_lobs, 'Timestamps and stored LOBs do not match anymore')
+        self.assertEqual(length_rl_times, length_bmk_lobs, 'Timestamps and stored LOBs do not match anymore')
+
 
 if __name__ == '__main__':
     unittest.main()
