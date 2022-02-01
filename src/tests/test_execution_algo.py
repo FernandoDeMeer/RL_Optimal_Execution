@@ -34,6 +34,21 @@ class FakeLOBGenerator:
         self.time = datetime.strptime(time, '%H:%M:%S')
 
 
+class TestDataFeed(unittest.TestCase):
+    fake_lob = FakeLOBGenerator()
+    random_time = "09:00:00"
+
+    def test_feed(self):
+        self.fake_lob.reset(time=self.random_time)
+        times = []
+        best_asks = []
+        for i in range(60):
+            dt, lob = self.fake_lob.next_lob_snapshot()
+            times.append(dt)
+            best_asks.append(lob.get_best_ask())
+        self.assertEqual(max(np.diff(best_asks)), min(np.diff(best_asks)), 'LOB not growing steadily')
+
+
 class RLAlgo(TWAPAlgo):
     def __init__(self, *args, **kwargs):
         super(RLAlgo, self).__init__(*args, **kwargs)
@@ -228,8 +243,10 @@ class TestExecutionLogic(unittest.TestCase):
         broker.benchmark_algo = algo
         broker.simulate_algo(algo)
 
-        traded_volumes_per_time = [float(ts['quantity']) for ts in broker.trade_logs['benchmark_algo']]
-        achieved_prices_per_time = [float(ts['price']) for ts in broker.trade_logs['benchmark_algo']]
+        traded_volumes_per_time = [float(ts['quantity']) for ts in broker.trade_logs['benchmark_algo']
+                                   if ts['message'] == 'trade']
+        achieved_prices_per_time = [float(ts['price']) for ts in broker.trade_logs['benchmark_algo']
+                                    if ts['message'] == 'trade']
         vwap_ours = np.dot(achieved_prices_per_time, traded_volumes_per_time) / sum(traded_volumes_per_time)
 
         # check that trades in the LOB logs match with our generated logs
@@ -247,6 +264,7 @@ class TestExecutionLogic(unittest.TestCase):
                 vwap_list.append(vwap)
                 vol_list.append(float(vol))
         vwap_derived = np.dot(vwap_list, vol_list) / sum(vol_list)
+        self.assertEqual(vwap_ours, 29.7832, 'VWAP is not correct anymore')
         self.assertEqual(vwap_ours, vwap_derived, 'VWAPS are not matching')
 
 
