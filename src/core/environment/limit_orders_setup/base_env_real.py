@@ -107,22 +107,18 @@ class BaseEnv(gym.Env, ABC):
                                      no_of_slices=self.broker.benchmark_algo.no_of_slices,
                                      bucket_placement_func=self.broker.benchmark_algo.bucket_placement_func,
                                      broker_data_feed=self.broker.data_feed)
+        self.broker.reset(self.broker.rl_algo)
 
         self.mid_pxs = []
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
 
-        self.state = self.build_observation_at_event(
-            event_time=self.broker.benchmark_algo.algo_events[0].strftime('%H:%M:%S'))
+        self.state = self.build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[0])
         self.reward = 0
         self.done = False
         self.info = {}
 
         self.ui_epoch += 1
-
-        # also reset the algos within the broker class
-        self.broker.reset(self.broker.benchmark_algo)
-        self.broker.reset(self.broker.rl_algo)
 
         return self.state
 
@@ -179,17 +175,24 @@ class BaseEnv(gym.Env, ABC):
 
         # convert action if necessary
         action = self._convert_action(action)
-
         vol_to_trade = self.infer_volume_from_action(action)
-        done_bmk = self.broker.simulate_to_next_action(self.broker.benchmark_algo)
-        done_rl = self.broker.simulate_to_next_action(self.broker.rl_algo, vol_to_trade)
+
+        # simulate both benchmark and rl algo until to the next action point...
+        event_bmk, done_bmk, lob = self.broker.simulate_to_next_event(self.broker.benchmark_algo)
+        done_bmk = self.broker.simulate_to_next_action(self.broker.benchmark_algo, event_bmk, done_bmk, lob)
+
+        event_rl, done_rl, lob = self.broker.simulate_to_next_event(self.broker.rl_algo)
+        done_rl = self.broker.simulate_to_next_action(self.broker.rl_algo, event_rl, done_rl, lob, vol_to_trade)
+
         if done_bmk != done_rl:
             raise ValueError("Benchmark and RL algo have finished at different times !!!")
+        self.done = done_rl
 
-        self.broker.rl_algo.order_idx += 1
+        # also get state and reward now
+        self.state = 0
+        reward = self.reward_func()
 
-        # update the remaining bucket vol
-        self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx] -= vol_to_trade
+        return self.state, reward, self.done, {}
 
     def step(self, action):
 
@@ -229,7 +232,7 @@ class BaseEnv(gym.Env, ABC):
         else:
             # Go to the next event otherwise
             self.state = self.build_observation_at_event(
-                event_time=self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
+                event_time=self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx])
 
         self.info = {}
 
@@ -239,14 +242,10 @@ class BaseEnv(gym.Env, ABC):
         """ Logic for inferring the volume from the action placed in the env """
 
         vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        vol_to_trade = round(vol_to_trade, 3)
+        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
+        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
             vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = \
-            vol_to_trade
-        decimals = - self.broker.benchmark_algo.tick_size.as_tuple().exponent
-        factor = 10 ** decimals
-        vol_to_trade = math.floor(vol_to_trade * factor) / factor
         return vol_to_trade
 
     def build_observation_space(self):
@@ -294,9 +293,13 @@ class BaseEnv(gym.Env, ABC):
         # if yes, just take it...
         # if not, use the actual history...
 
-        self.broker.data_feed.reset(time=event_time)
+        self.broker.data_feed.reset(time=event_time.strftime("%H:%M:%S.%f"))
         # Sample past lobs
         past_dts, past_lobs = self.broker.data_feed.past_lob_snapshots(no_of_past_lobs=self.config['obs_config']['nr_of_lobs']-1)
+
+
+
+
         for dt in past_dts:
             self.broker.hist_dict['rl']['timestamp'].append(dt)
         for lob in past_lobs:
@@ -339,6 +342,9 @@ class BaseEnv(gym.Env, ABC):
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+
+    def reward_func(self):
+        raise NotImplementedError
 
     def calc_reward(self, reward_type):
 
