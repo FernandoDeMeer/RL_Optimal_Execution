@@ -80,7 +80,7 @@ class Broker(ABC):
 
         self._record_lob(dt, lob, algo)
 
-    def _simulate_to_next_order(self, algo):
+    def _simulate_to_next_event(self, algo):
         """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
          remaining orders.
          """
@@ -206,42 +206,50 @@ class Broker(ABC):
                     self.remaining_order['rl_algo'] = []
         return log
 
+    def simulate_to_next_action(self, algo):
+
+        event, done, lob = self._simulate_to_next_event(algo)
+        print(event)
+        algo_order = algo.get_order_at_event(event, lob)
+        log = self.place_orders(algo_order, type(algo).__name__)
+
+        # update the remaining quantities to trade
+        algo.update_remaining_volume(log, event['type'])
+
+        if len(self.remaining_order['benchmark_algo']) != 0:
+            if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
+                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                while len(self.remaining_order['benchmark_algo'])!= 0:
+                    dt, lob = self.data_feed.next_lob_snapshot()
+                    self._record_lob(dt, lob, algo)
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    # place the orders and update the remaining quantities to trade in the algo
+                    log = self.place_orders(order_temp_bmk,type(algo).__name__)
+                    algo.vol_remaining -= Decimal(str(log['quantity']))
+                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+        if len(self.remaining_order['rl_algo'])!= 0:
+            if self.remaining_order['rl_algo'][0]['type'] == 'market':
+                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                while len(self.remaining_order['rl_algo'])!= 0:
+                    dt, lob = self.data_feed.next_lob_snapshot()
+                    self._record_lob(dt, lob, algo)
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    # place the orders and update the remaining quantities to trade in the algo
+                    log = self.place_orders(order_temp_rl,type(algo).__name__)
+                    algo.vol_remaining -= Decimal(str(log['quantity']))
+                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+
+        if event['type'] == 'bucket_bound' and not done:
+            done = self.simulate_to_next_action(algo)
+        return done
+
     def simulate_algo(self, algo):
         """ Simulates the execution of an algorithm """
 
         self.reset(algo)
         done = False
         while not done:
-            # get next event and order from this
-            event, done, lob = self._simulate_to_next_order(algo)
-            algo_order = algo.get_order_at_event(event, lob)
-            log = self.place_orders(algo_order, type(algo).__name__)
-
-            # update the remaining quantities to trade
-            algo.update_remaining_volume(log, event['type'])
-
-            if len(self.remaining_order['benchmark_algo']) != 0:
-                if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
-                    # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
-                    while len(self.remaining_order['benchmark_algo'])!= 0:
-                        dt, lob = self.data_feed.next_lob_snapshot()
-                        self._record_lob(dt, lob, algo)
-                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                        # place the orders and update the remaining quantities to trade in the algo
-                        log = self.place_orders(order_temp_bmk,type(algo).__name__)
-                        algo.vol_remaining -= Decimal(str(log['quantity']))
-                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
-            if len(self.remaining_order['rl_algo'])!= 0:
-                if self.remaining_order['rl_algo'][0]['type'] == 'market':
-                    # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
-                    while len(self.remaining_order['rl_algo'])!= 0:
-                        dt, lob = self.data_feed.next_lob_snapshot()
-                        self._record_lob(dt, lob, algo)
-                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                        # place the orders and update the remaining quantities to trade in the algo
-                        log = self.place_orders(order_temp_rl,type(algo).__name__)
-                        algo.vol_remaining -= Decimal(str(log['quantity']))
-                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+            done = self.simulate_to_next_action(algo)
 
     def get_last_bucket_algo(self,algo_type):
 
