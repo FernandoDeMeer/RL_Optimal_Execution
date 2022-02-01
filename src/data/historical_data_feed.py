@@ -12,14 +12,16 @@ def get_time_idx_from_raw_data(data, t):
     """ Returns the index of data right before a given time 't' """
 
     dt = datetime.utcfromtimestamp(data[-1] / 1000)
-    start_t = datetime.strptime(t, '%H:%M:%S') # TODO: We are operating at the second magnitude, maybe once we load all data it makes more sense to include milliseconds)
-    start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second)
+    try:
+        start_t = datetime.strptime(t, '%H:%M:%S.%f')
+    except:
+        start_t = datetime.strptime(t, '%H:%M:%S')
+    start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second, start_t.microsecond)
     unix_t = calendar.timegm(start_dt.utctimetuple()) * 1e3 + start_dt.microsecond / 1e3
     idx = (np.abs(data - unix_t)).argmin()
     # These two lines were giving the lob_snapshot previous to dt, when it should be the one after If we are placing trades (to account for computing time/latency etc)
     while data[idx] <= unix_t:
         idx = idx + 1
-
     return idx
 
 
