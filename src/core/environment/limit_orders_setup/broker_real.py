@@ -75,12 +75,63 @@ class Broker(ABC):
         # update to the first instance of the datafeed & record this
         self.data_feed.reset(time=algo.start_time)
         dt, lob = self.data_feed.next_lob_snapshot()
-
         algo.reset()
 
         self._record_lob(dt, lob, algo)
 
-    def _simulate_to_next_event(self, algo):
+    def simulate_algo(self, algo):
+        """ Simulates the execution of an algorithm """
+
+        self.reset(algo)
+        done = False
+        while not done:
+            event, done, lob = self.simulate_to_next_event(algo)
+            done = self.simulate_to_next_action(algo, event, done, lob)
+
+    def simulate_to_next_action(self, algo, event, done, lob, vol=None):
+
+        algo_order = algo.get_order_at_event(event, lob)
+        if vol is not None:
+            algo_order['quantity'] = Decimal(str(vol))
+        log = self.place_orders(algo_order, type(algo).__name__)
+
+        # update the remaining quantities to trade
+        algo.update_remaining_volume(log, event['type'])
+
+        if len(self.remaining_order['benchmark_algo']) != 0:
+            if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
+                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                while len(self.remaining_order['benchmark_algo'])!= 0:
+                    dt, lob = self.data_feed.next_lob_snapshot()
+                    self._record_lob(dt, lob, algo)
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    # place the orders and update the remaining quantities to trade in the algo
+                    log = self.place_orders(order_temp_bmk,type(algo).__name__)
+                    algo.vol_remaining -= Decimal(str(log['quantity']))
+                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+        if len(self.remaining_order['rl_algo'])!= 0:
+            if self.remaining_order['rl_algo'][0]['type'] == 'market':
+                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
+                while len(self.remaining_order['rl_algo'])!= 0:
+                    dt, lob = self.data_feed.next_lob_snapshot()
+                    self._record_lob(dt, lob, algo)
+                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                    # place the orders and update the remaining quantities to trade in the algo
+                    log = self.place_orders(order_temp_rl,type(algo).__name__)
+                    algo.vol_remaining -= Decimal(str(log['quantity']))
+                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+
+        if event['type'] == 'bucket_bound' and not done:
+            event, done, lob = self.simulate_to_next_event(algo)
+            done = self.simulate_to_next_action(algo, event, done, lob)
+
+        if type(algo).__name__ != 'RLAlgo':
+            self.benchmark_algo = algo
+        else:
+            self.rl_algo = algo
+        return done
+
+    def simulate_to_next_event(self, algo):
         """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
          remaining orders.
          """
@@ -88,9 +139,14 @@ class Broker(ABC):
         # get info from the algo about the type and time of next event
         event, done = algo.get_next_event()
 
-        if len(self.remaining_order['benchmark_algo']) != 0 or len(self.remaining_order['rl_algo']) != 0:
+        if type(algo).__name__ != 'RLAlgo':
+            remaining_order = self.remaining_order['benchmark_algo']
+        else:
+            remaining_order = self.remaining_order['rl_algo']
+
+        if len(remaining_order) != 0:
             # If we have remaining orders go through the LOBs until they are executed
-            while len(self.remaining_order['benchmark_algo']) != 0 or len(self.remaining_order['rl_algo']) != 0:
+            while len(remaining_order) != 0:
                 # Loop through the LOBs
                 dt, lob = self.data_feed.next_lob_snapshot()
                 self._record_lob(dt, lob, algo)
@@ -101,9 +157,11 @@ class Broker(ABC):
                     if type(algo).__name__ != 'RLAlgo':
                         log = self.place_orders(order_temp_bmk, type(algo).__name__)
                         algo.update_remaining_volume(log)
+                        remaining_order = self.remaining_order['benchmark_algo']
                     else:
                         log = self.place_orders(order_temp_rl, type(algo).__name__)
                         algo.update_remaining_volume(log)
+                        remaining_order = self.remaining_order['rl_algo']
                 else:
                     # We have reached the next event with unexecuted volume, if we are not at the end of a bucket
                     # we add it to the volume of next order
@@ -117,15 +175,20 @@ class Broker(ABC):
 
                     # If the event is a bucket end, the market order will be placed according to the bucket_vol_remaining.
                     # Either way, we remove the remaining orders.
-                    self.remaining_order['benchmark_algo'] = []
-                    self.remaining_order['rl_algo'] = []
+                    if type(algo).__name__ != 'RLAlgo':
+                        self.remaining_order['benchmark_algo'] = []
+                    else:
+                        self.remaining_order['rl_algo'] = []
+                    remaining_order = []
 
         # If we have no remaining orders (for example after executing an entire limit order or after a bucket end),
         # we reset the datafeed to jump to the LOB corresponding to the next event.
-        self.data_feed.reset(time='{}:{}:{}'.format(event['time'].hour,event['time'].minute,event['time'].second))
+        self.data_feed.reset(time='{}:{}:{}.{}'.format(event['time'].hour,
+                                                       event['time'].minute,
+                                                       event['time'].second,
+                                                       event['time'].microsecond))
         dt, lob = self.data_feed.next_lob_snapshot()
         self._record_lob(dt, lob, algo)
-
         return event, done, lob
 
     def _record_lob(self, dt, lob, algo):
@@ -178,7 +241,6 @@ class Broker(ABC):
 
         # update the remaining orders
         if algo_type != 'RLAlgo':
-            # input_lob = copy.deepcopy(self.hist_dict['benchmark_lob'][-1])
             log = place_order(self.hist_dict['benchmark']['lob'][-1],
                               self.hist_dict['benchmark']['timestamp'][-1],
                               order)
@@ -192,7 +254,6 @@ class Broker(ABC):
                     self.remaining_order['benchmark_algo'] = []
 
         if algo_type == 'RLAlgo':
-            # input_lob = copy.deepcopy(self.hist_dict['rl_lob'][-1])
             log = place_order(self.hist_dict['rl']['lob'][-1],
                               self.hist_dict['rl']['timestamp'][-1],
                               order)
@@ -205,51 +266,6 @@ class Broker(ABC):
                 else:
                     self.remaining_order['rl_algo'] = []
         return log
-
-    def simulate_to_next_action(self, algo):
-
-        event, done, lob = self._simulate_to_next_event(algo)
-        print(event)
-        algo_order = algo.get_order_at_event(event, lob)
-        log = self.place_orders(algo_order, type(algo).__name__)
-
-        # update the remaining quantities to trade
-        algo.update_remaining_volume(log, event['type'])
-
-        if len(self.remaining_order['benchmark_algo']) != 0:
-            if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
-                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
-                while len(self.remaining_order['benchmark_algo'])!= 0:
-                    dt, lob = self.data_feed.next_lob_snapshot()
-                    self._record_lob(dt, lob, algo)
-                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                    # place the orders and update the remaining quantities to trade in the algo
-                    log = self.place_orders(order_temp_bmk,type(algo).__name__)
-                    algo.vol_remaining -= Decimal(str(log['quantity']))
-                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
-        if len(self.remaining_order['rl_algo'])!= 0:
-            if self.remaining_order['rl_algo'][0]['type'] == 'market':
-                # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
-                while len(self.remaining_order['rl_algo'])!= 0:
-                    dt, lob = self.data_feed.next_lob_snapshot()
-                    self._record_lob(dt, lob, algo)
-                    order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                    # place the orders and update the remaining quantities to trade in the algo
-                    log = self.place_orders(order_temp_rl,type(algo).__name__)
-                    algo.vol_remaining -= Decimal(str(log['quantity']))
-                    algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
-
-        if event['type'] == 'bucket_bound' and not done:
-            done = self.simulate_to_next_action(algo)
-        return done
-
-    def simulate_algo(self, algo):
-        """ Simulates the execution of an algorithm """
-
-        self.reset(algo)
-        done = False
-        while not done:
-            done = self.simulate_to_next_action(algo)
 
     def get_last_bucket_algo(self,algo_type):
 
