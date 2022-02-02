@@ -2,6 +2,7 @@ import random
 import gym
 import math
 import numpy as np
+import copy
 
 from datetime import datetime, timedelta
 from gym.utils import seeding
@@ -113,7 +114,7 @@ class BaseEnv(gym.Env, ABC):
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
 
-        self.state = self.build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[0])
+        self.state = self._build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[0])
         self.reward = 0
         self.done = False
         self.info = {}
@@ -189,8 +190,13 @@ class BaseEnv(gym.Env, ABC):
         self.done = done_rl
 
         # also get state and reward now
-        self.state = 0
-        reward = self.reward_func()
+        if self.done:
+            self.state = []
+        else:
+            self._build_observation_at_event(event_time=
+                                             self.broker.benchmark_algo.algo_events[
+                                                 self.broker.benchmark_algo.event_idx])
+        reward = 0
 
         return self.state, reward, self.done, {}
 
@@ -231,7 +237,7 @@ class BaseEnv(gym.Env, ABC):
             self.done = True
         else:
             # Go to the next event otherwise
-            self.state = self.build_observation_at_event(
+            self._build_observation_at_event(
                 event_time=self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx])
 
         self.info = {}
@@ -285,7 +291,12 @@ class BaseEnv(gym.Env, ABC):
                                                 shape=(obs_space_n,),
                                                 dtype=np.float64)
 
-    def build_observation_at_event(self, event_time):
+    def _build_observation_at_event(self, event_time):
+        """ Helper to pass only copy of datafeed/make sure datafeed is only affected in broker class """
+        feed = copy.copy(self.broker.data_feed)
+        self.build_observation(event_time, feed)
+
+    def build_observation(self, event_time, data_feed):
         # Build observation using the history of order book data, first reset the data_feed at the event timestamp
 
         # LOGIC:
@@ -293,12 +304,15 @@ class BaseEnv(gym.Env, ABC):
         # if yes, just take it...
         # if not, use the actual history...
 
-        self.broker.data_feed.reset(time=event_time.strftime("%H:%M:%S.%f"))
-        # Sample past lobs
-        past_dts, past_lobs = self.broker.data_feed.past_lob_snapshots(no_of_past_lobs=self.config['obs_config']['nr_of_lobs']-1)
+        data_feed.reset(time=event_time.strftime("%H:%M:%S.%f"))
+        past_dts, past_lobs = data_feed.past_lob_snapshots(no_of_past_lobs=self.config['obs_config']['nr_of_lobs'])
 
-
-
+        # check if we already have enough data collected in our
+        """
+        lob_bools = [True if dt in self.broker.hist_dict['rl']['timestamp'] else False for dt in past_dts]
+        dates = [past_dts[idx] if lob_bools[idx] else  for idx in range(len(past_dts))]
+        lob_hist =
+        """
 
         for dt in past_dts:
             self.broker.hist_dict['rl']['timestamp'].append(dt)
