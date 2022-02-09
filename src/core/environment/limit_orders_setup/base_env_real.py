@@ -194,10 +194,7 @@ class BaseEnv(gym.Env, ABC):
 
         # Check if we are at the end of an episode:
 
-        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - \
-                self.broker.rl_algo.buckets.n_buckets:
-                self.calc_reward('episode') # Comment this out if calculating rewards at the end of each bucket.
-        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events) - self.broker.rl_algo.buckets.n_buckets:
+        if self.broker.rl_algo.event_idx >= len(self.broker.rl_algo.algo_events)-self.broker.rl_algo.buckets.n_buckets:
             # self.calc_reward('episode') # Comment this out if calculating rewards at the end of each bucket.
             self.done = True
         else:
