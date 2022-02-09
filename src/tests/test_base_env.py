@@ -6,15 +6,16 @@ import gym
 from decimal import Decimal
 import numpy as np
 
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv, ExampleEnv
+from src.core.environment.limit_orders_setup.base_env_real import BaseEnv, ExampleEnvRewardAtStep
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.data.historical_data_feed import HistoricalDataFeed
+
 
 # from train_app import ROOT_DIR
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..\..'))
 
 
-class DerivedEnv(ExampleEnv):
+class DerivedEnv(ExampleEnvRewardAtStep):
     def __init__(self, *args, **kwargs):
         super(DerivedEnv, self).__init__(*args, **kwargs)
 
@@ -128,6 +129,137 @@ class TestBaseEnvLogic(unittest.TestCase):
             s, r, done, i = base_env_v2.step(action=np.array([0]))
         """
 
+
+class RewardAtStepEnv(DerivedEnv):
+    def reward_func(self):
+        """ Env with reward after each step """
+
+        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_prev['time'],
+                                                            end_date=self.event_bmk['time'])
+        reward = vwap_bmk/vwap_rl
+        return reward
+
+
+class RewardAtBucketEnv(DerivedEnv):
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket """
+
+        reward = 0
+        if self.event_bmk_bucket['time'] != self.event_bmk_bucket_prev['time']:
+            if self.done:
+                a=0
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_bucket_prev['time'],
+                                                                end_date=self.event_bmk_bucket['time'])
+            reward = vwap_bmk/vwap_rl
+        return reward
+
+
+class RewardAtEpisodeEnv(DerivedEnv):
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket """
+        reward = 0
+        if self.done:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
+            reward = vwap_bmk/vwap_rl
+        return reward
+
+
+class TestRewardCalcsInEnv(unittest.TestCase):
+
+    lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
+                                  instrument='btc_usdt',
+                                  samples_per_file=200)
+
+    # define the broker class
+    broker = Broker(lob_feed)
+
+    # define the config
+    env_config = {'obs_config': {"lob_depth": 5,
+                                 "nr_of_lobs": 5,
+                                 "norm": True},
+                  'trade_config': {'trade_direction': 1,
+                                   'vol_low': 25,
+                                   'vol_high': 25,
+                                   'no_slices_low': 1,
+                                   'no_slices_high': 1,
+                                   'bucket_func': lambda no_of_slices: 0.5,
+                                   'rand_bucket_low': 0,
+                                   'rand_bucket_high': 0},
+                  'start_config': {'hour_low': 9,
+                                   'hour_high': 9,
+                                   'minute_low': 0,
+                                   'minute_high': 0,
+                                   'second_low': 0,
+                                   'second_high': 0},
+                  'exec_config': {'exec_times': [1]},
+                  'reset_config': {'reset_num_episodes': 1}}
+
+
+    # define action space
+    action_space = gym.spaces.Box(low=-1.0,
+                                  high=1.0,
+                                  shape=(1,),
+                                  dtype=np.float32)
+
+    def test_reward_at_step(self):
+        env = RewardAtStepEnv(broker=self.broker,
+                              config=self.env_config,
+                              action_space=self.action_space)
+        env.reset()
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = env.step(action=np.array([0]))
+            reward_vec.append(r)
+        self.assertEqual(reward_vec, [], 'Reward Vector is off')
+
+    def test_reward_at_bucket(self):
+        env = RewardAtBucketEnv(broker=self.broker,
+                                config=self.env_config,
+                                action_space=self.action_space)
+        env.reset()
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = env.step(action=np.array([0]))
+            reward_vec.append(r)
+        self.assertEqual(reward_vec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 'Reward Vector is off')
+
+    def test_reward_at_episode(self):
+        env = RewardAtEpisodeEnv(broker=self.broker,
+                                 config=self.env_config,
+                                 action_space=self.action_space)
+        env.reset()
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = env.step(action=np.array([0]))
+            reward_vec.append(r)
+        self.assertEqual(reward_vec, [], 'Reward Vector is off')
+
+
+
+
+"""
+class MarketImpactFeed(HistoricalDataFeed):
+
+    def next_lob_snapshot(self, shift=0):
+        dt, lob = super(MarketImpactFeed, self).next_lob_snapshot()
+        return dt, self.shift_lob(lob, shift)
+
+    @staticmethod
+    def shift_lob(lob, shift):
+        return lob + shift
+
+
+class TestMarketImpactModel(unittest.TestCase):
+
+    lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
+                                  instrument='btc_usdt',
+                                  samples_per_file=200)
+"""
 
 if __name__ == '__main__':
     unittest.main()

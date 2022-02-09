@@ -181,9 +181,11 @@ class BaseEnv(gym.Env, ABC):
 
         # simulate both benchmark and rl algo until before the next action is placed...
         self.event_bmk_prev = self.event_bmk
+        self.event_bmk_bucket, self.event_bmk_bucket_prev = self.event_bmk, self.event_bmk
         self.event_bmk, self.done_bmk, self.lob_bmk = self._step_algo(algo_type='benchmark')
 
         self.event_rl_prev = self.event_rl
+        self.event_rl_bucket, self.event_rl_bucket_prev = self.event_rl, self.event_rl
         self.event_rl, self.done_rl, self.lob_rl = self._step_algo(algo_type='rl', volume=vol_to_trade)
 
         if self.done_bmk != self.done_rl:
@@ -221,7 +223,10 @@ class BaseEnv(gym.Env, ABC):
             done = self.broker.place_next_order(algo, event, done, lob)
             if not done:
                 event, done, lob = self.broker.simulate_to_next_event(algo)
-
+            if algo_type == 'benchmark':
+                self.event_bmk_bucket = event
+            else:
+                self.event_rl_bucket = event
         return event, done, lob
 
     def infer_volume_from_action(self, action):
@@ -331,29 +336,6 @@ class BaseEnv(gym.Env, ABC):
     def reward_func(self):
         raise NotImplementedError
 
-    """
-    def calc_reward(self, reward_type):
-
-        if reward_type == 'episode':
-            self.broker.calc_vwaps()
-            # Sparse 1-0 reward
-            if (self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap) * self.broker.rl_algo.trade_direction < 0:
-                self.reward += 1
-
-        elif reward_type == 'bucket':
-            bmk_bucket_vwap, rl_bucket_vwap  = self.broker.calc_vwaps_bucket()
-            if self.broker.rl_algo.bucket_idx == 0:
-                self.broker.benchmark_algo.bmk_vwap = bmk_bucket_vwap
-                self.broker.rl_algo.rl_vwap = rl_bucket_vwap
-            else:
-                self.broker.benchmark_algo.bmk_vwap = self.broker.benchmark_algo.bmk_vwap * (self.broker.rl_algo.bucket_idx/(self.broker.rl_algo.bucket_idx +1)) +\
-                                                      bmk_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
-                self.broker.rl_algo.rl_vwap = self.broker.rl_algo.rl_vwap * (self.broker.rl_algo.bucket_idx/(self.broker.rl_algo.bucket_idx +1)) +\
-                                              rl_bucket_vwap/(self.broker.rl_algo.bucket_idx +1)
-            # % of outperformance vs benchmark reward
-            self.reward = 100*((self.broker.benchmark_algo.bmk_vwap - self.broker.rl_algo.rl_vwap)*self.broker.benchmark_algo.trade_direction/self.broker.benchmark_algo.bmk_vwap)
-    """
-
     def _validate_config(self):
         """ tests if all inputs are allowed """
 
@@ -428,24 +410,50 @@ class BaseEnv(gym.Env, ABC):
                                     data=timeseries_data)
 
 
-class ExampleEnv(BaseEnv):
+class ExampleEnvRewardAtStep(BaseEnv):
     def reward_func(self):
-        """ simple example with relative execution price after each action """
+        """ Env with reward after each step """
+
         vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_prev['time'],
                                                             end_date=self.event_bmk['time'])
-        return vwap_rl/vwap_bmk-1
+        reward = 0
+        if self.trade_dir == 1:
+            if vwap_bmk > vwap_rl:
+                reward = 1
+        else:
+            if vwap_bmk < vwap_rl:
+                reward = 1
+        return reward
 
 
-class ExampleEnv2(BaseEnv):
+class ExampleEnvRewardAtBucket(BaseEnv):
+    def reward_func(self):
+        """ Env with reward at end of each bucket """
+
+        reward = 0
+        if self.event_bmk_bucket['time'] != self.event_bmk_bucket_prev['time']:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_bucket_prev['time'],
+                                                                end_date=self.event_bmk_bucket['time'])
+            if self.trade_dir == 1:
+                if vwap_bmk > vwap_rl:
+                    reward = 1
+            else:
+                if vwap_bmk < vwap_rl:
+                    reward = 1
+        return reward
+
+
+class ExampleEnvRewardAtEpisode(BaseEnv):
     def reward_func(self):
         """ Env with sparse reward only at end of episode """
+
+        reward = 0
         if self.done:
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
             if self.trade_dir == 1:
                 if vwap_bmk > vwap_rl:
                     reward = 1
             else:
-                reward = 0
-        else:
-            reward = 0
+                if vwap_bmk < vwap_rl:
+                    reward = 1
         return reward

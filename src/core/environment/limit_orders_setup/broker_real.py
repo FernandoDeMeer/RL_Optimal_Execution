@@ -342,5 +342,7 @@ class Broker(ABC):
     def _calc_vwap(logs):
         p = [Decimal(trade['price']) for trade in logs if trade['message'] == 'trade']
         v = [trade['quantity'] for trade in logs if trade['message'] == 'trade']
+        if len(p) == 0 or len(v) == 0:
+            return 0
         vwap = float(np.dot(p, v)/sum(v))
         return vwap
