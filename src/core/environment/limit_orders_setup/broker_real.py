@@ -86,10 +86,22 @@ class Broker(ABC):
         """ Simulates the execution of an algorithm """
 
         self.reset(algo)
-        done = False
+        # simulate to first event...
+        event, done, lob = self.simulate_to_next_event(algo)
         while not done:
+
+            # place order at event...
+            _ = self.place_next_order(algo, event, done, lob)
+
+            # simulate to next event...
             event, done, lob = self.simulate_to_next_event(algo)
-            done = self.place_next_order(algo, event, done, lob)
+
+            # if event is a bucket bound, we place another trade (if necessary)...
+            if event['type'] == 'bucket_bound':
+                done = self.place_next_order(algo, event, done, lob)
+            if not done:
+                # if still not done, then simulate again to next event...
+                event, done, lob = self.simulate_to_next_event(algo)
 
     def simulate_to_next_event(self, algo):
         """ Gets the next event from the benchmark algorithm and simulates the LOB up to this point if there are
