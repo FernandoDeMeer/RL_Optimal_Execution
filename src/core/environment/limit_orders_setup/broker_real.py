@@ -124,8 +124,8 @@ class Broker(ABC):
             while len(remaining_order) != 0:
                 # Loop through the LOBs
                 dt, lob = self.data_feed.next_lob_snapshot()
-                self._record_lob(dt, lob, algo)
                 if dt <= event['time']:
+                    self._record_lob(dt, lob, algo)
                     order_temp_bmk, order_temp_rl = self._update_remaining_orders()
 
                     # place the orders and update the remaining quantities to trade in the algo

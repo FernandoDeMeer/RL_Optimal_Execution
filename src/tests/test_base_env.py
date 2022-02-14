@@ -247,9 +247,6 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         while not done:
             s, r, done, i = env.step(action=np.array([0]))
             reward_vec.append(r)
-        self.assertEqual(self.broker.trade_logs["benchmark_algo"],
-                         self.broker.trade_logs["rl_algo"],
-                         'Trading history is not the same')
         self.assertEqual(reward_vec, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 'Reward Vector is off')
 
 
@@ -284,7 +281,6 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                    'samples_per_feed': 20,
                                    'reset_feed': True}}
 
-
     # define action space
     action_space = gym.spaces.Box(low=-1.0,
                                   high=1.0,
@@ -303,11 +299,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                     bucket_placement_func=lambda no_of_slices: 0.5,
                     broker_data_feed=lob_feed)
 
-    def test_correct_execution(self):
-        # now test if I actually get the exact simulation results
-        a=0
-
     def test_similarity(self):
+
         # define the broker class
         broker = Broker(self.lob_feed)
         broker.benchmark_algo = self.algo
@@ -324,6 +317,36 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
         self.assertEqual(broker.trade_logs["benchmark_algo"],
                          self.base_env.broker.trade_logs["benchmark_algo"],
                          'Trading history is not the same btw env stepping and broker simulation')
+
+    def test_timeline(self):
+        """ Test if there are double entries in time collection"""
+
+        self.base_env.reset()
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = self.base_env.step(action=np.array([0]))
+            reward_vec.append(r)
+
+        bmk_log_times = [log["timestamp"] for log in self.broker.trade_logs['benchmark_algo']]
+        contains_duplicates = len(bmk_log_times) != len(set(bmk_log_times))
+        self.assertEqual(contains_duplicates, False, 'Benchmark trading Logs contain duplicate timestamps')
+
+        rl_log_times = [log["timestamp"] for log in self.broker.trade_logs['rl_algo']]
+        contains_duplicates = len(rl_log_times) != len(set(rl_log_times))
+        self.assertEqual(contains_duplicates, False, 'RL trading Logs contain duplicate timestamps')
+
+        bmk_hist = self.broker.hist_dict['benchmark']["timestamp"]
+        contains_duplicates = len(bmk_hist) != len(set(bmk_hist))
+        self.assertEqual(contains_duplicates, False, 'Benchmark history contains duplicate timestamps')
+
+        rl_hist = self.broker.hist_dict['rl']["timestamp"]
+        contains_duplicates = len(rl_hist) != len(set(rl_hist))
+        self.assertEqual(contains_duplicates, False, 'Benchmark history contains duplicate timestamps')
+
+        vwap_bmk, vwap_rl = self.base_env.broker.calc_vwap_from_logs()
+        self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS must be the same')
+        self.assertEqual(vwap_bmk, 32876.9147788, 'VWAP was 32876.9147788 before')
 
 
 if __name__ == '__main__':
