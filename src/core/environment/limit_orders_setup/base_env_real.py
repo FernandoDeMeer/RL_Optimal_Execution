@@ -32,7 +32,8 @@ DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                        'second_low': 0,
                                        'second_high': 59},
                       'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240]},
-                      'reset_config': {'reset_num_episodes': 1}}
+                      'reset_config': {'reset_num_episodes': 1,
+                                       'reset_data_feed': 20}}
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -58,6 +59,9 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     return np.concatenate((prices, volumes), axis=0)
 
 
+conv2date = lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%f')
+
+
 class BaseEnv(gym.Env, ABC):
 
     def __init__(self, broker, action_space, config={}):
@@ -69,7 +73,8 @@ class BaseEnv(gym.Env, ABC):
         self.config = self.add_default_dict(config)
         self._validate_config()
         self.reset_counter = 0
-        self.reset()
+        self.reset_counter_feed = 0
+        # self.reset()
         self.build_observation_space()
         self.action_space = action_space
         self.seed()
@@ -86,6 +91,12 @@ class BaseEnv(gym.Env, ABC):
             self.reset_counter = 0
         self.reset_counter += 1
 
+        hard_reset = False
+        if self.reset_counter_feed >= self.config['reset_config']['reset_data_feed']:
+            self.reset_counter_feed = 0
+            hard_reset = True
+        self.reset_counter_feed += 1
+
         # instantiate benchark algo
         self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.trade_dir,
                                               volume=self.volume,
@@ -98,7 +109,7 @@ class BaseEnv(gym.Env, ABC):
                                               broker_data_feed=self.broker.data_feed)
 
         # reset the broker with the new benchmark_algo
-        self.broker.reset(self.broker.benchmark_algo)
+        self.broker.reset(self.broker.benchmark_algo, hard=hard_reset)
         self.event_bmk, self.done_bmk, self.lob_bmk = self.broker.simulate_to_next_event(self.broker.benchmark_algo)
 
         # Declare the RLAlgo
@@ -111,10 +122,16 @@ class BaseEnv(gym.Env, ABC):
         self.broker.reset(self.broker.rl_algo)
         self.event_rl, self.done_rl, self.lob_rl = self.broker.simulate_to_next_event(self.broker.rl_algo)
 
+        if self.event_rl['time'] != self.event_bmk['time']:
+            raise ValueError("Benchmark and RL algo have events at different timestamps !!!")
+        self.event_time = self.event_rl["time"]
+        self.bucket_time = self.event_rl["time"]
+
         self.mid_pxs = []
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
         self.state = self._build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[0])
+
         self.reward = 0
         self.done = False
         self.info = {}
@@ -180,18 +197,20 @@ class BaseEnv(gym.Env, ABC):
         vol_to_trade = self.infer_volume_from_action(action)
 
         # simulate both benchmark and rl algo until before the next action is placed...
-        self.event_bmk_prev = self.event_bmk
-        self.event_bmk_bucket, self.event_bmk_bucket_prev = self.event_bmk, self.event_bmk
-        self.event_bmk, self.done_bmk, self.lob_bmk = self._step_algo(algo_type='benchmark')
+        self.event_time_prev = self.event_bmk['time']
+        self.bucket_time_prev = self.bucket_time
 
-        self.event_rl_prev = self.event_rl
-        self.event_rl_bucket, self.event_rl_bucket_prev = self.event_rl, self.event_rl
+        self.event_bmk, self.done_bmk, self.lob_bmk = self._step_algo(algo_type='benchmark')
         self.event_rl, self.done_rl, self.lob_rl = self._step_algo(algo_type='rl', volume=vol_to_trade)
 
         if self.done_bmk != self.done_rl:
             raise ValueError("Benchmark and RL algo have finished at different times !!!")
         if self.event_rl['time'] != self.event_bmk['time']:
             raise ValueError("Benchmark and RL algo have events at different timestamps !!!")
+
+        self.event_time = conv2date(max(self.broker.trade_logs["benchmark_algo"][-1]["timestamp"],
+                              self.broker.trade_logs["rl_algo"][-1]["timestamp"]))
+        self.bucket_time = conv2date(max(self.bucket_time_bmk, self.bucket_time_rl))
 
         self.done = self.done_rl
 
@@ -225,8 +244,11 @@ class BaseEnv(gym.Env, ABC):
                 event, done, lob = self.broker.simulate_to_next_event(algo)
             if algo_type == 'benchmark':
                 self.event_bmk_bucket = event
+                self.bucket_time_bmk = self.broker.trade_logs["benchmark_algo"][-1]["timestamp"]
             else:
                 self.event_rl_bucket = event
+                self.bucket_time_rl = self.broker.trade_logs["rl_algo"][-1]["timestamp"]
+
         return event, done, lob
 
     def infer_volume_from_action(self, action):
@@ -414,8 +436,8 @@ class ExampleEnvRewardAtStep(BaseEnv):
     def reward_func(self):
         """ Env with reward after each step """
 
-        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_prev['time'],
-                                                            end_date=self.event_bmk['time'])
+        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
+                                                            end_date=self.event_time)
         reward = 0
         if self.trade_dir == 1:
             if vwap_bmk > vwap_rl:
@@ -431,9 +453,9 @@ class ExampleEnvRewardAtBucket(BaseEnv):
         """ Env with reward at end of each bucket """
 
         reward = 0
-        if self.event_bmk_bucket['time'] != self.event_bmk_bucket_prev['time']:
-            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_bucket_prev['time'],
-                                                                end_date=self.event_bmk_bucket['time'])
+        if self.bucket_time != self.bucket_time_prev:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                end_date=self.bucket_time)
             if self.trade_dir == 1:
                 if vwap_bmk > vwap_rl:
                     reward = 1

@@ -43,7 +43,6 @@ class HistoricalDataFeed(DataFeed):
                  start_day=None,
                  end_day=None,
                  time=None,
-                 samples_per_file=1,
                  lob_depth=20):
 
         self.data_dir = data_dir
@@ -71,11 +70,10 @@ class HistoricalDataFeed(DataFeed):
 
         self.data = None
 
-        self.binary_file_idx = 0
+        self.binary_file_idx = -1
         self.binary_file_idx_prev = None
         self.data_row_idx = None
         self._remaining_rows_in_file = None
-        self.samples_per_file = samples_per_file
         self._samples_drawn = 0
 
         self.lob_depth = lob_depth
@@ -86,6 +84,9 @@ class HistoricalDataFeed(DataFeed):
 
     def next_lob_snapshot(self, previous_lob_snapshot=None, lob_format=True):
         """ return next snapshot of the limit order book """
+
+        assert self.binary_file_idx >= 0, (
+            'hard reset() must be applied once before next_lob_snapshot(), if called via broker reset with hard=True!')
 
         assert self._remaining_rows_in_file is not None, (
             'reset() must be called once before next_lob_snapshot()')
@@ -129,7 +130,7 @@ class HistoricalDataFeed(DataFeed):
                 output.append(lob.reshape(-1, self.lob_depth))
             return timestamp_dts, output
 
-    def reset(self, time=None, first_time=None, last_time=None):
+    def reset(self, time=None, first_time=None, last_time=None, hard=False):
         """ Reset the datafeed and set from where to start sampling """
 
         self.time = time
@@ -139,12 +140,7 @@ class HistoricalDataFeed(DataFeed):
             self.last_time = last_time
         self.binary_file_idx_prev = self.binary_file_idx
 
-        if self._samples_drawn < self.samples_per_file:
-            # ...draw 'samples_per_file' amounts from same file before moving on
-            self._samples_drawn += 1
-        else:
-            # if drawn enough, move on to the next file
-            self._samples_drawn = 1
+        if hard:
             self.binary_file_idx += 1
 
         # start from beginning, if end is reached
@@ -184,3 +180,20 @@ class HistoricalDataFeed(DataFeed):
 
         self.data_row_idx = idx
         self._remaining_rows_in_file = self.data.shape[0] - idx
+
+    def __eq__(self, other):
+        if self.__class__ == other.__class__:
+            for k, v in self.__dict__.items():
+                if k == "_samples_drawn":
+                    continue
+                try:
+                    tst = v == other.__dict__[k]
+                    if not tst:
+                        return False
+                except:
+                    tst = (v == other.__dict__[k]).any()
+                    if not tst:
+                        return False
+            return True
+        else:
+            raise TypeError('Comparing object is not of the same type.')

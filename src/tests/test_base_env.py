@@ -6,7 +6,7 @@ import gym
 from decimal import Decimal
 import numpy as np
 
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv, ExampleEnvRewardAtStep
+from src.core.environment.limit_orders_setup.base_env_real import BaseEnv, ExampleEnvRewardAtStep, TWAPAlgo
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.data.historical_data_feed import HistoricalDataFeed
 
@@ -40,8 +40,7 @@ class DerivedEnv(ExampleEnvRewardAtStep):
 class TestBaseEnvLogic(unittest.TestCase):
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
+                                  instrument='btc_usdt')
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -65,7 +64,8 @@ class TestBaseEnvLogic(unittest.TestCase):
                                    'second_low': 0,
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1]},
-                  'reset_config': {'reset_num_episodes': 1}}
+                  'reset_config': {'reset_num_episodes': 1,
+                                   'reset_data_feed': 20}}
 
 
     # define action space
@@ -108,34 +108,20 @@ class TestBaseEnvLogic(unittest.TestCase):
         # self.assertEqual(vwap_ours, 32878.389652, 'VWAP is not correct')
         import warnings
         warnings.warn("Is the price still correct? Why is it different than before?")
-        self.assertEqual(vwap_ours, round(vwap_derived, 8), 'VWAPS are not matching')
+        self.assertEqual(round(vwap_ours, 8), round(vwap_derived, 8), 'VWAPS are not matching')
 
         # test the built in functions for this
         vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
         self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS are not matching')
-        self.assertEqual(vwap_ours, vwap_rl, 'VWAPS are not matching')
-
-    def test_large_volumes(self):
-        """
-        env_config_v2 = self.env_config
-        env_config_v2["trade_config"]["vol_low"] = 1000
-        env_config_v2["trade_config"]["vol_high"] = 1000
-        base_env_v2 = DerivedEnv(broker=self.broker,
-                                 config=env_config_v2,
-                                 action_space=self.action_space)
-        base_env_v2.reset()
-        done = False
-        while not done:
-            s, r, done, i = base_env_v2.step(action=np.array([0]))
-        """
+        self.assertEqual(round(vwap_ours, 8), round(vwap_rl, 8), 'VWAPS are not matching')
 
 
 class RewardAtStepEnv(DerivedEnv):
     def reward_func(self):
         """ Env with reward after each step """
 
-        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_prev['time'],
-                                                            end_date=self.event_bmk['time'])
+        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
+                                                            end_date=self.event_time)
         reward = vwap_bmk/vwap_rl
         return reward
 
@@ -146,11 +132,9 @@ class RewardAtBucketEnv(DerivedEnv):
         """ Env with reward at end of each bucket """
 
         reward = 0
-        if self.event_bmk_bucket['time'] != self.event_bmk_bucket_prev['time']:
-            if self.done:
-                a=0
-            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_bmk_bucket_prev['time'],
-                                                                end_date=self.event_bmk_bucket['time'])
+        if self.bucket_time != self.bucket_time_prev:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                end_date=self.bucket_time)
             reward = vwap_bmk/vwap_rl
         return reward
 
@@ -169,8 +153,7 @@ class RewardAtEpisodeEnv(DerivedEnv):
 class TestRewardCalcsInEnv(unittest.TestCase):
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
+                                  instrument='btc_usdt')
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -194,7 +177,8 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                    'second_low': 0,
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1]},
-                  'reset_config': {'reset_num_episodes': 1}}
+                  'reset_config': {'reset_num_episodes': 1,
+                                   'reset_data_feed': 20}}
 
 
     # define action space
@@ -202,18 +186,6 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                   high=1.0,
                                   shape=(1,),
                                   dtype=np.float32)
-
-    def test_reward_at_step(self):
-        env = RewardAtStepEnv(broker=self.broker,
-                              config=self.env_config,
-                              action_space=self.action_space)
-        env.reset()
-        done = False
-        reward_vec = []
-        while not done:
-            s, r, done, i = env.step(action=np.array([0]))
-            reward_vec.append(r)
-        self.assertEqual(reward_vec, [], 'Reward Vector is off')
 
     def test_reward_at_bucket(self):
         env = RewardAtBucketEnv(broker=self.broker,
@@ -225,41 +197,109 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         while not done:
             s, r, done, i = env.step(action=np.array([0]))
             reward_vec.append(r)
-        self.assertEqual(reward_vec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 'Reward Vector is off')
+        # check that all trades are actually the same...
+        self.assertEqual(self.broker.trade_logs["benchmark_algo"],
+                         self.broker.trade_logs["rl_algo"],
+                         'Trading history is not the same')
+        self.assertEqual(reward_vec, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 'Reward Vector is off')
 
     def test_reward_at_episode(self):
+
         env = RewardAtEpisodeEnv(broker=self.broker,
                                  config=self.env_config,
                                  action_space=self.action_space)
+        # feed1 = copy.deepcopy(env.broker.data_feed)
+
+        for i in range(20):
+            env.reset()
+            done = False
+            reward_vec = []
+            while not done:
+                s, r, done, i = env.step(action=np.array([0]))
+                reward_vec.append(r)
+            self.assertEqual(self.broker.trade_logs["benchmark_algo"],
+                             self.broker.trade_logs["rl_algo"],
+                             'Trading history is not the same')
+
+        env.reset()
+        # feed2 = copy.deepcopy(env.broker.data_feed)
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = env.step(action=np.array([0]))
+            reward_vec.append(r)
+
+        # self.assertEqual(feed1==feed2, True, 'Datafeed is different')
+        self.assertEqual(self.broker.trade_logs["benchmark_algo"],
+                         self.broker.trade_logs["rl_algo"],
+                         'Trading history is not the same')
+        self.assertEqual(reward_vec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], 'Reward Vector is off')
+
+    def test_reward_at_step(self):
+        env = RewardAtStepEnv(broker=self.broker,
+                              config=self.env_config,
+                              action_space=self.action_space)
         env.reset()
         done = False
         reward_vec = []
         while not done:
             s, r, done, i = env.step(action=np.array([0]))
             reward_vec.append(r)
-        self.assertEqual(reward_vec, [], 'Reward Vector is off')
+        self.assertEqual(self.broker.trade_logs["benchmark_algo"],
+                         self.broker.trade_logs["rl_algo"],
+                         'Trading history is not the same')
+        self.assertEqual(reward_vec, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 'Reward Vector is off')
 
 
-
-
-"""
-class MarketImpactFeed(HistoricalDataFeed):
-
-    def next_lob_snapshot(self, shift=0):
-        dt, lob = super(MarketImpactFeed, self).next_lob_snapshot()
-        return dt, self.shift_lob(lob, shift)
-
-    @staticmethod
-    def shift_lob(lob, shift):
-        return lob + shift
-
-
-class TestMarketImpactModel(unittest.TestCase):
+class TestSimilarityEnvVsSim(unittest.TestCase):
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
-"""
+                                  instrument='btc_usdt')
+
+    # define the broker class
+    broker = Broker(lob_feed)
+
+    # define the config
+    env_config = {'obs_config': {"lob_depth": 5,
+                                 "nr_of_lobs": 5,
+                                 "norm": True},
+                  'trade_config': {'trade_direction': 1,
+                                   'vol_low': 25,
+                                   'vol_high': 25,
+                                   'no_slices_low': 1,
+                                   'no_slices_high': 1,
+                                   'bucket_func': lambda no_of_slices: 0.5,
+                                   'rand_bucket_low': 0,
+                                   'rand_bucket_high': 0},
+                  'start_config': {'hour_low': 9,
+                                   'hour_high': 9,
+                                   'minute_low': 0,
+                                   'minute_high': 0,
+                                   'second_low': 0,
+                                   'second_high': 0},
+                  'exec_config': {'exec_times': [1]},
+                  'reset_config': {'reset_num_episodes': 1,
+                                   'reset_data_feed': 20}}
+
+
+    # define action space
+    action_space = gym.spaces.Box(low=-1.0,
+                                  high=1.0,
+                                  shape=(1,),
+                                  dtype=np.float32)
+    # define the env
+    base_env = DerivedEnv(broker=broker,
+                          config=env_config,
+                          action_space=action_space)
+
+    algo = TWAPAlgo(trade_direction=1,
+                    volume=25,
+                    start_time='09:00:00',
+                    end_time='09:01:00',
+                    no_of_slices=1,
+                    bucket_placement_func=lambda no_of_slices: 0.5,
+                    broker_data_feed=fake_lob)
+
 
 if __name__ == '__main__':
     unittest.main()

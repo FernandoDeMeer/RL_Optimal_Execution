@@ -58,10 +58,10 @@ class Broker(ABC):
         self.trade_logs = {'benchmark_algo': [],
                            'rl_algo': []}
 
-    def reset(self, algo):
+    def reset(self, algo, hard=False):
         """ Resetting the Broker class """
 
-        self.data_feed.reset(time=algo.start_time)
+        self.data_feed.reset(time=algo.start_time, hard=hard)
         dt, lob = self.data_feed.next_lob_snapshot()
 
         # reset the Broker logs
@@ -80,12 +80,12 @@ class Broker(ABC):
 
         # update to the first instance of the datafeed & record this
         algo.reset()
-        self._record_lob(dt, lob, algo)
+        # self._record_lob(dt, lob, algo)
 
     def simulate_algo(self, algo):
         """ Simulates the execution of an algorithm """
 
-        self.reset(algo)
+        self.reset(algo, hard=True)
         # simulate to first event...
         event, done, lob = self.simulate_to_next_event(algo)
         while not done:
@@ -125,7 +125,7 @@ class Broker(ABC):
                 # Loop through the LOBs
                 dt, lob = self.data_feed.next_lob_snapshot()
                 self._record_lob(dt, lob, algo)
-                if dt < event['time']:
+                if dt <= event['time']:
                     order_temp_bmk, order_temp_rl = self._update_remaining_orders()
 
                     # place the orders and update the remaining quantities to trade in the algo
@@ -206,12 +206,6 @@ class Broker(ABC):
                     algo.vol_remaining -= Decimal(str(log['quantity']))
                     algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
                     self.current_dt_rl = dt
-
-        """
-        if event['type'] == 'bucket_bound' and not done:
-            event, done, lob = self.simulate_to_next_event(algo)
-            done = self.place_next_order(algo, event, done, lob)
-        """
 
         if type(algo).__name__ != 'RLAlgo':
             self.benchmark_algo = algo
@@ -304,10 +298,9 @@ class Broker(ABC):
             start_idx_rl = 0
         else:
             start_idx_bmk = next(x[0] for x in enumerate([f(log["timestamp"]) for log in self.trade_logs['benchmark_algo']])
-                                 if x[1] >= start_date)
-            # print(start_date)
+                                 if x[1] > start_date)
             start_idx_rl = next(x[0] for x in enumerate([f(log["timestamp"]) for log in self.trade_logs['rl_algo']])
-                                if x[1] >= start_date)
+                                if x[1] > start_date)
 
         # filter by end idx
         if end_date is None:
@@ -316,12 +309,12 @@ class Broker(ABC):
         else:
             try:
                 end_idx_bmk = next(x[0] for x in enumerate([f(log["timestamp"]) for log in self.trade_logs['benchmark_algo']])
-                                   if x[1] >= end_date)
+                                   if x[1] >= end_date) + 1
             except:
                 end_idx_bmk = len(self.trade_logs['benchmark_algo'])
             try:
                 end_idx_rl = next(x[0] for x in enumerate([f(log["timestamp"]) for log in self.trade_logs['rl_algo']])
-                                  if x[1] >= end_date)
+                                  if x[1] >= end_date) + 1
             except:
                 end_idx_rl = len(self.trade_logs['rl_algo'])
 

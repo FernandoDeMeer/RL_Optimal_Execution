@@ -296,7 +296,7 @@ class TWAPAlgo(ExecutionAlgo):
     def __init__(self, *args, **kwargs):
         super(TWAPAlgo, self).__init__(*args, **kwargs)
         # get the tick size implied by LOB data_feed
-        self.broker_data_feed.reset(time=self.start_time)
+        self.broker_data_feed.reset(time=self.start_time, hard=True)
         dt, lob = self.broker_data_feed.next_lob_snapshot()
         v = lob.bids.get_price_list(lob.get_best_bid()).volume
         tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
