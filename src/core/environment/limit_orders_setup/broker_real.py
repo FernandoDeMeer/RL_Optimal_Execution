@@ -58,10 +58,10 @@ class Broker(ABC):
         self.trade_logs = {'benchmark_algo': [],
                            'rl_algo': []}
 
-    def reset(self, algo, hard=False):
+    def reset(self, algo):
         """ Resetting the Broker class """
 
-        self.data_feed.reset(time=algo.start_time, hard=hard)
+        self.data_feed.reset(time=algo.start_time)
         dt, lob = self.data_feed.next_lob_snapshot()
 
         # reset the Broker logs
@@ -85,7 +85,7 @@ class Broker(ABC):
     def simulate_algo(self, algo):
         """ Simulates the execution of an algorithm """
 
-        self.reset(algo, hard=True)
+        self.reset(algo)
         # simulate to first event...
         event, done, lob = self.simulate_to_next_event(algo)
         while not done:

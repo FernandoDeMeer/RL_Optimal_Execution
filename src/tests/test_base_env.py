@@ -65,8 +65,8 @@ class TestBaseEnvLogic(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1]},
                   'reset_config': {'reset_num_episodes': 1,
-                                   'reset_data_feed': 20}}
-
+                                   'samples_per_feed': 20,
+                                   'reset_feed': True}}
 
     # define action space
     action_space = gym.spaces.Box(low=-1.0,
@@ -106,8 +106,8 @@ class TestBaseEnvLogic(unittest.TestCase):
         vwap_derived = np.dot(vwap_list, vol_list) / sum(vol_list)
 
         # self.assertEqual(vwap_ours, 32878.389652, 'VWAP is not correct')
-        import warnings
-        warnings.warn("Is the price still correct? Why is it different than before?")
+        # import warnings
+        # warnings.warn("Is the price still correct? Why is it different than before?")
         self.assertEqual(round(vwap_ours, 8), round(vwap_derived, 8), 'VWAPS are not matching')
 
         # test the built in functions for this
@@ -178,7 +178,8 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1]},
                   'reset_config': {'reset_num_episodes': 1,
-                                   'reset_data_feed': 20}}
+                                   'samples_per_feed': 20,
+                                   'reset_feed': True}}
 
 
     # define action space
@@ -208,31 +209,32 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         env = RewardAtEpisodeEnv(broker=self.broker,
                                  config=self.env_config,
                                  action_space=self.action_space)
-        # feed1 = copy.deepcopy(env.broker.data_feed)
 
         for i in range(20):
             env.reset()
             done = False
             reward_vec = []
             while not done:
-                s, r, done, i = env.step(action=np.array([0]))
+                _, r, done, _ = env.step(action=np.array([0]))
                 reward_vec.append(r)
             self.assertEqual(self.broker.trade_logs["benchmark_algo"],
                              self.broker.trade_logs["rl_algo"],
                              'Trading history is not the same')
+            if i > 0:
+                self.assertEqual(self.broker.trade_logs["benchmark_algo"],
+                                 logs_prev,
+                                 'Trading history is not the same as previously')
+            logs_prev = self.broker.trade_logs["benchmark_algo"]
 
         env.reset()
-        # feed2 = copy.deepcopy(env.broker.data_feed)
         done = False
         reward_vec = []
         while not done:
             s, r, done, i = env.step(action=np.array([0]))
             reward_vec.append(r)
-
-        # self.assertEqual(feed1==feed2, True, 'Datafeed is different')
-        self.assertEqual(self.broker.trade_logs["benchmark_algo"],
-                         self.broker.trade_logs["rl_algo"],
-                         'Trading history is not the same')
+        self.assertNotEqual(self.broker.trade_logs["benchmark_algo"],
+                            logs_prev,
+                            'Trading should be different now since sampled from a different date')
         self.assertEqual(reward_vec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], 'Reward Vector is off')
 
     def test_reward_at_step(self):
@@ -279,7 +281,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1]},
                   'reset_config': {'reset_num_episodes': 1,
-                                   'reset_data_feed': 20}}
+                                   'samples_per_feed': 20,
+                                   'reset_feed': True}}
 
 
     # define action space
@@ -298,7 +301,29 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                     end_time='09:01:00',
                     no_of_slices=1,
                     bucket_placement_func=lambda no_of_slices: 0.5,
-                    broker_data_feed=fake_lob)
+                    broker_data_feed=lob_feed)
+
+    def test_correct_execution(self):
+        # now test if I actually get the exact simulation results
+        a=0
+
+    def test_similarity(self):
+        # define the broker class
+        broker = Broker(self.lob_feed)
+        broker.benchmark_algo = self.algo
+        broker.simulate_algo(self.algo)
+
+        self.base_env.reset()
+        done = False
+        reward_vec = []
+        while not done:
+            s, r, done, i = self.base_env.step(action=np.array([0]))
+            reward_vec.append(r)
+
+        # now trade logs from stepping through env and trade logs from simulateion must be the same...
+        self.assertEqual(broker.trade_logs["benchmark_algo"],
+                         self.base_env.broker.trade_logs["benchmark_algo"],
+                         'Trading history is not the same btw env stepping and broker simulation')
 
 
 if __name__ == '__main__':

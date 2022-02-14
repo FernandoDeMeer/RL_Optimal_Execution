@@ -33,7 +33,8 @@ DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                        'second_high': 59},
                       'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240]},
                       'reset_config': {'reset_num_episodes': 1,
-                                       'reset_data_feed': 20}}
+                                       'samples_per_feed': 20,
+                                       'reset_feed': True}}
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -73,7 +74,7 @@ class BaseEnv(gym.Env, ABC):
         self.config = self.add_default_dict(config)
         self._validate_config()
         self.reset_counter = 0
-        self.reset_counter_feed = 0
+        self.next_data_counter = 0
         # self.reset()
         self.build_observation_space()
         self.action_space = action_space
@@ -91,11 +92,11 @@ class BaseEnv(gym.Env, ABC):
             self.reset_counter = 0
         self.reset_counter += 1
 
-        hard_reset = False
-        if self.reset_counter_feed >= self.config['reset_config']['reset_data_feed']:
-            self.reset_counter_feed = 0
-            hard_reset = True
-        self.reset_counter_feed += 1
+        if self.next_data_counter >= self.config['reset_config']['samples_per_feed'] and \
+                self.config['reset_config']['reset_feed']:
+            self.next_data_counter = 0
+            self.broker.data_feed.next_data()
+        self.next_data_counter += 1
 
         # instantiate benchark algo
         self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.trade_dir,
@@ -109,7 +110,7 @@ class BaseEnv(gym.Env, ABC):
                                               broker_data_feed=self.broker.data_feed)
 
         # reset the broker with the new benchmark_algo
-        self.broker.reset(self.broker.benchmark_algo, hard=hard_reset)
+        self.broker.reset(self.broker.benchmark_algo)
         self.event_bmk, self.done_bmk, self.lob_bmk = self.broker.simulate_to_next_event(self.broker.benchmark_algo)
 
         # Declare the RLAlgo
