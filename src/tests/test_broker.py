@@ -13,8 +13,7 @@ class TestBroker(unittest.TestCase):
 
     # define the datafeed
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt',
-                                  samples_per_file=200)
+                                  instrument='btc_usdt')
 
     algo = TWAPAlgo(trade_direction=1,
                     volume=25,
