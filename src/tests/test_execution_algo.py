@@ -254,7 +254,6 @@ class TestExecutionLogic(unittest.TestCase):
 
         dts = [trade['timestamp'] for trade in broker.trade_logs['benchmark_algo']]
         res = all(i < j for i, j in zip(dts, dts[1:]))
-        # why are there 2 trades at 9:00:05 ??
         self.assertEqual(res, True, 'Overlapping trades detected')
 
     def test_correct_execution_price(self):
