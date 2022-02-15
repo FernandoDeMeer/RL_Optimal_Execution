@@ -349,6 +349,58 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
         self.assertEqual(vwap_bmk, 32876.9147788, 'VWAP was 32876.9147788 before')
 
 
+class TestTwoSlices(unittest.TestCase):
+
+    lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
+                                  instrument='btc_usdt')
+
+    # define the broker class
+    broker = Broker(lob_feed)
+
+    # define the config
+    env_config = {'obs_config': {"lob_depth": 5,
+                                 "nr_of_lobs": 5,
+                                 "norm": True},
+                  'trade_config': {'trade_direction': 1,
+                                   'vol_low': 25,
+                                   'vol_high': 25,
+                                   'no_slices_low': 2,
+                                   'no_slices_high': 2,
+                                   'bucket_func': lambda no_of_slices: [0.2, 0.8],
+                                   'rand_bucket_low': 0,
+                                   'rand_bucket_high': 0},
+                  'start_config': {'hour_low': 9,
+                                   'hour_high': 9,
+                                   'minute_low': 0,
+                                   'minute_high': 0,
+                                   'second_low': 0,
+                                   'second_high': 0},
+                  'exec_config': {'exec_times': [1]},
+                  'reset_config': {'reset_num_episodes': 1,
+                                   'samples_per_feed': 20,
+                                   'reset_feed': True}}
+
+    # define action space
+    action_space = gym.spaces.Box(low=-1.0,
+                                  high=1.0,
+                                  shape=(1,),
+                                  dtype=np.float32)
+    # define the env
+    base_env = DerivedEnv(broker=broker,
+                          config=env_config,
+                          action_space=action_space)
+
+    def test_slices(self):
+        self.base_env.reset()
+        done = False
+        idx = 0
+        while not done:
+            s, r, done, i = self.base_env.step(action=np.array([0]))
+
+        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
+        self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS are not matching')
+
+
 if __name__ == '__main__':
     unittest.main()
 

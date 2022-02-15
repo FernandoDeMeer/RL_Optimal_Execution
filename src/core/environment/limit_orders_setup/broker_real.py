@@ -293,6 +293,7 @@ class Broker(ABC):
 
         f = lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%f')
         # filter by start idx
+        # it seems possible that one algo has data in there and the other doesnt???
         if start_date is None:
             start_idx_bmk = 0
             start_idx_rl = 0

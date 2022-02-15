@@ -18,7 +18,7 @@ from ray.rllib.agents.ppo import PPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
 from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog
@@ -77,8 +77,7 @@ def lob_env_creator(env_config):
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(DATA_DIR, "market", env_config["symbol"]),
                                   instrument=env_config["symbol"],
                                   start_day=data_start_day,
-                                  end_day=data_end_day,
-                                  samples_per_file=200)
+                                  end_day=data_end_day)
 
     broker = Broker(lob_feed)
 
@@ -90,9 +89,9 @@ def lob_env_creator(env_config):
                                   shape=(1,),
                                   dtype=np.float32)
 
-    return BaseEnv(broker=broker,
-                   config=observation_space_config,
-                   action_space=action_space)
+    return RewardAtStepEnv(broker=broker,
+                           config=observation_space_config,
+                           action_space=action_space)
 
 
 def init_session_container(session_id):
