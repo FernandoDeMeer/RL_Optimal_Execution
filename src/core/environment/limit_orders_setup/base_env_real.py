@@ -199,8 +199,10 @@ class BaseEnv(gym.Env, ABC):
             self.done = True
         else:
             # Go to the next event otherwise
-            self.state = self.build_observation_at_event(
-                event_time=self.broker.rl_algo.algo_events[self.broker.rl_algo.event_idx].strftime('%H:%M:%S'))
+            event_time = self.broker.rl_algo.execution_times[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx].strftime('%H:%M:%S')
+            # Check that we are building the observation at an order_placement_time, not at a bucket_end
+            assert event_time not in self.broker.rl_algo.buckets.bucket_bounds
+            self.state = self.build_observation_at_event(event_time=event_time)
 
         self.info = {}
 
