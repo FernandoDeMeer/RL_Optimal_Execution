@@ -26,7 +26,7 @@ def init_arg_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="lob_env")
-    parser.add_argument("--num-cpus", type=int, default=1)
+    parser.add_argument("--num-cpus", type=int, default=0)
 
     parser.add_argument(
         "--framework",
@@ -165,7 +165,22 @@ if __name__ == "__main__":
                                      "symbol": args.symbol,
                                      "train_data_periods": [2021, 6, 21, 2021, 6, 21],
                                      "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
-                                 }}
+                                 },
+                                 'trade_config': {'trade_direction': 1,
+                                                  'vol_low': 500,
+                                                  'vol_high': 500,
+                                                  'no_slices_low': 4,
+                                                  'no_slices_high': 4,
+                                                  'bucket_func': lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
+                                                  'rand_bucket_low': 0,
+                                                  'rand_bucket_high': 0},
+                                 'start_config': {'hour_low': 12,
+                                                  'hour_high': 12,
+                                                  'minute_low': 0,
+                                                  'minute_high': 0,
+                                                  'second_low': 0,
+                                                  'second_high': 0},
+                                 'exec_config': {'exec_times': [10]}}
                 }
     config.update(env_config)
 
@@ -176,9 +191,11 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
+    """
     session_container_path = init_session_container(args.session_id)
     with open(os.path.join(session_container_path, "config.json"), "a", encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
+    """
 
     if args.no_tune:
 
