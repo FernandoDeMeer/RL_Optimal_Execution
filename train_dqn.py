@@ -14,7 +14,7 @@ from ray.tune.logger import pretty_print
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,7 +55,7 @@ def init_arg_parser():
     parser.add_argument(
         "--no-tune",
         type=bool,
-        default=False,
+        default=True,
         help="Run without Tune using a manual train loop instead.")
 
     parser.add_argument(
@@ -73,7 +73,7 @@ def init_arg_parser():
     return parser.parse_args()
 
 
-class TradingEnvDQN(BaseEnv):
+class TradingEnvDQN(RewardAtStepEnv):
     def _convert_action(self, action):
         return action / self.action_space.n
 
@@ -91,8 +91,7 @@ def lob_env_creator(env_config):
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(DATA_DIR, "market", env_config['train_config']["symbol"]),
                                   instrument=env_config['train_config']["symbol"],
                                   start_day=data_start_day,
-                                  end_day=data_end_day,
-                                  samples_per_file=200)
+                                  end_day=data_end_day)
 
     exclude_keys = {'train_config'}
     env_config_clean = {k: env_config[k] for k in set(list(env_config.keys())) - set(exclude_keys)}
