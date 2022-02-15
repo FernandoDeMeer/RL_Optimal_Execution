@@ -127,6 +127,7 @@ class BaseEnv(gym.Env, ABC):
             raise ValueError("Benchmark and RL algo have events at different timestamps !!!")
         self.event_time = self.event_rl["time"]
         self.bucket_time = self.event_rl["time"]
+        self.bucket_time_bmk, self.bucket_time_rl = None, None
 
         self.mid_pxs = []
 
@@ -210,8 +211,9 @@ class BaseEnv(gym.Env, ABC):
             raise ValueError("Benchmark and RL algo have events at different timestamps !!!")
 
         self.event_time = conv2date(max(self.broker.trade_logs["benchmark_algo"][-1]["timestamp"],
-                              self.broker.trade_logs["rl_algo"][-1]["timestamp"]))
-        self.bucket_time = conv2date(max(self.bucket_time_bmk, self.bucket_time_rl))
+                                        self.broker.trade_logs["rl_algo"][-1]["timestamp"]))
+        if self.bucket_time_bmk is not None and self.bucket_time_rl is not None:
+            self.bucket_time = conv2date(max(self.bucket_time_bmk, self.bucket_time_rl))
 
         self.done = self.done_rl
 
@@ -449,34 +451,78 @@ class ExampleEnvRewardAtStep(BaseEnv):
         return reward
 
 
-class ExampleEnvRewardAtBucket(BaseEnv):
+class RewardAtStepEnv(BaseEnv):
     def reward_func(self):
-        """ Env with reward at end of each bucket """
+        """ Env with reward after each step as % improvement of VWAP """
+
+        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
+                                                            end_date=self.event_time)
+        try:
+            if self.trade_dir == 1:
+                reward = vwap_bmk / vwap_rl
+            else:
+                reward = vwap_rl / vwap_bmk
+        except:
+            reward = 0
+        return reward
+
+
+class RewardAtBucketEnv(BaseEnv):
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket as % improvement of VWAP """
 
         reward = 0
         if self.bucket_time != self.bucket_time_prev:
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
                                                                 end_date=self.bucket_time)
-            if self.trade_dir == 1:
-                if vwap_bmk > vwap_rl:
-                    reward = 1
-            else:
-                if vwap_bmk < vwap_rl:
-                    reward = 1
+            try:
+                if self.trade_dir == 1:
+                    reward = vwap_bmk / vwap_rl
+                else:
+                    reward = vwap_rl / vwap_bmk
+            except:
+                reward = 0
         return reward
 
 
-class ExampleEnvRewardAtEpisode(BaseEnv):
+class RewardAtEpisodeEnv(BaseEnv):
+
     def reward_func(self):
-        """ Env with sparse reward only at end of episode """
+        """ Env with reward at end of episode as % improvement of VWAP """
 
         reward = 0
         if self.done:
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
-            if self.trade_dir == 1:
-                if vwap_bmk > vwap_rl:
-                    reward = 1
-            else:
-                if vwap_bmk < vwap_rl:
-                    reward = 1
+            try:
+                if self.trade_dir == 1:
+                    reward = vwap_bmk / vwap_rl
+                else:
+                    reward = vwap_rl / vwap_bmk
+            except:
+                reward = 0
         return reward
+
+
+class NarrowTradeLimitEnv(RewardAtStepEnv):
+    """ Example """
+
+    def __init__(self, *args, **kwargs):
+        super(NarrowTradeLimitEnv, self).__init__(*args, **kwargs)
+
+    def _convert_action(self, action):
+        action_min = 0.8
+        action_max = 1.2
+        action_rescaled = (action[0] - self.action_space.low[0]) / \
+                          (self.action_space.high[0] - self.action_space.low[0])
+        action_out = action_min + action_rescaled * (action_max - action_min)
+        return action_out
+
+    def infer_volume_from_action(self, action):
+        vol_to_trade = Decimal(str(action)) * \
+                       self.broker.benchmark_algo.volumes_per_trade[self.broker.benchmark_algo.order_idx][0]
+        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
+        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
+        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
+            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        return vol_to_trade
