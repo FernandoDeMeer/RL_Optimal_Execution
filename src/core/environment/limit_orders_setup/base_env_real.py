@@ -210,8 +210,12 @@ class BaseEnv(gym.Env, ABC):
         if self.event_rl['time'] != self.event_bmk['time']:
             raise ValueError("Benchmark and RL algo have events at different timestamps !!!")
 
-        self.event_time = conv2date(max(self.broker.trade_logs["benchmark_algo"][-1]["timestamp"],
-                                        self.broker.trade_logs["rl_algo"][-1]["timestamp"]))
+        if len(self.broker.trade_logs["rl_algo"]) == 0:
+            self.event_time = self.broker.trade_logs["benchmark_algo"][-1]["timestamp"]
+        else:
+            self.event_time = conv2date(max(self.broker.trade_logs["benchmark_algo"][-1]["timestamp"],
+                                            self.broker.trade_logs["rl_algo"][-1]["timestamp"]))
+
         if self.bucket_time_bmk is not None and self.bucket_time_rl is not None:
             self.bucket_time = conv2date(max(self.bucket_time_bmk, self.bucket_time_rl))
 
