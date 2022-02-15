@@ -455,9 +455,9 @@ class RewardAtStepEnv(BaseEnv):
     def reward_func(self):
         """ Env with reward after each step as % improvement of VWAP """
 
-        vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
-                                                            end_date=self.event_time)
         try:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
+                                                                end_date=self.event_time)
             if self.trade_dir == 1:
                 reward = vwap_bmk / vwap_rl
             else:
@@ -473,16 +473,16 @@ class RewardAtBucketEnv(BaseEnv):
         """ Env with reward at end of each bucket as % improvement of VWAP """
 
         reward = 0
-        if self.bucket_time != self.bucket_time_prev:
-            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
-                                                                end_date=self.bucket_time)
-            try:
+        try:
+            if self.bucket_time != self.bucket_time_prev:
+                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                    end_date=self.bucket_time)
                 if self.trade_dir == 1:
                     reward = vwap_bmk / vwap_rl
                 else:
                     reward = vwap_rl / vwap_bmk
-            except:
-                reward = 0
+        except:
+            reward = 0
         return reward
 
 
@@ -492,15 +492,15 @@ class RewardAtEpisodeEnv(BaseEnv):
         """ Env with reward at end of episode as % improvement of VWAP """
 
         reward = 0
-        if self.done:
-            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
-            try:
+        try:
+            if self.done:
+                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
                 if self.trade_dir == 1:
                     reward = vwap_bmk / vwap_rl
                 else:
                     reward = vwap_rl / vwap_bmk
-            except:
-                reward = 0
+        except:
+            reward = 0
         return reward
 
 

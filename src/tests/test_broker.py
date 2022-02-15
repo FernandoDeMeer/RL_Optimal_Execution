@@ -15,7 +15,6 @@ DATA_DIR = os.path.join(ROOT_DIR, "data")
 
 
 class TestBroker(unittest.TestCase):
-
     # define the datafeed
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
                                   instrument='btc_usdt')
@@ -39,7 +38,6 @@ class TestBroker(unittest.TestCase):
 
 
 class TestDummyEnv(unittest.TestCase):
-
     env_config = {
         "symbol": "btcusdt",
         "train_data_periods": [2021, 6, 21, 2021, 6, 21],
@@ -58,9 +56,26 @@ class TestDummyEnv(unittest.TestCase):
 
     broker = Broker(lob_feed)
 
-    observation_space_config = {'obs_config': {'lob_depth': 5,
-                                               'nr_of_lobs': 5,
-                                               'norm': True}}
+    observation_space_config = {'obs_config': {
+        "lob_depth": 5,
+        "nr_of_lobs": 5,
+        "norm": True},
+        'trade_config': {'trade_direction': 1,
+                         'vol_low': 500,
+                         'vol_high': 500,
+                         'no_slices_low': 4,
+                         'no_slices_high': 4,
+                         'bucket_func': lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
+                         'rand_bucket_low': 0,
+                         'rand_bucket_high': 0},
+        'start_config': {'hour_low': 12,
+                         'hour_high': 12,
+                         'minute_low': 0,
+                         'minute_high': 0,
+                         'second_low': 0,
+                         'second_high': 0},
+        'exec_config': {'exec_times': [10]}}
+
     action_space = gym.spaces.Box(low=0.0,
                                   high=1.0,
                                   shape=(1,),
@@ -78,6 +93,13 @@ class TestDummyEnv(unittest.TestCase):
         s, r, done, i = env.step(action=action)
     print("WORKED")
 
+    env.reset()
+    done = False
+    idx = 0
+    while not done:
+        action = env.action_space.sample()
+        s, r, done, i = env.step(action=action)
+    print("WORKED AGAIN")
 
 if __name__ == '__main__':
     unittest.main()
