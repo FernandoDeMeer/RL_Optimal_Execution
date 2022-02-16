@@ -391,6 +391,9 @@ class BaseEnv(gym.Env, ABC):
         if self.config['trade_config']['rand_bucket_low'] > self.config['trade_config']['rand_bucket_high']:
             raise ValueError("'rand_bucket_high' must be larger than 'rand_bucket_low'")
 
+        if self.config['trade_config']['rand_bucket_low'] < 0 or self.config['trade_config']['rand_bucket_high'] > 100:
+            raise ValueError("'rand_bucket_low' and 'rand_bucket_high' have to be percentages")
+
         if self.config['start_config']['hour_low'] > self.config['start_config']['hour_high']:
             raise ValueError("'hour_high' must be larger than 'hour_low'")
 
