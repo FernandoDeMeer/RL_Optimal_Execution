@@ -101,5 +101,6 @@ class TestDummyEnv(unittest.TestCase):
         s, r, done, i = env.step(action=action)
     print("WORKED AGAIN")
 
+
 if __name__ == '__main__':
     unittest.main()

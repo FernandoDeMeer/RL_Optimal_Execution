@@ -31,7 +31,7 @@ def init_arg_parser():
     parser.add_argument(
         "--framework",
         choices=["tf", "torch"],
-        default="torch",
+        default="tf",
         help="The DL framework specifier.")
 
     parser.add_argument(
@@ -49,7 +49,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=1,
+        default=100,
         help="Number of episodes to train.")
 
     parser.add_argument(
@@ -147,6 +147,7 @@ if __name__ == "__main__":
         "num_envs_per_worker": 1,
         "framework": args.framework,
         "evaluation_interval": 10,
+        "train_batch_size": 200,
         # Number of episodes to run per evaluation period.
         "evaluation_num_episodes": 1,
         "evaluation_config": {

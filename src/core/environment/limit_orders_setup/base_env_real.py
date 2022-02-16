@@ -132,14 +132,15 @@ class BaseEnv(gym.Env, ABC):
         self.mid_pxs = []
 
         # To build the first observation we need to reset the datafeed to the timestamp of the first algo_event
-        self.state = self._build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[0])
+        self.state_idx = 0
+        self.bucket_idx = 0
+        self.state = self._build_observation_at_event(event_time=self.broker.benchmark_algo.algo_events[self.state_idx])
 
         self.reward = 0
         self.done = False
         self.info = {}
 
         self.ui_epoch += 1
-
         return self.state
 
     def _reset_exec_params(self):
@@ -220,16 +221,17 @@ class BaseEnv(gym.Env, ABC):
             self.bucket_time = conv2date(max(self.bucket_time_bmk, self.bucket_time_rl))
 
         self.done = self.done_rl
-
-        # get state and reward
-        if self.done:
-            self.state = []
-        else:
-            self.state = self._build_observation_at_event(event_time=
-                                                          self.broker.benchmark_algo.algo_events[
-                                                              self.broker.benchmark_algo.event_idx])
         self.reward = self.reward_func()
         self.info = {}
+
+        self.state_idx += 1
+        if not self.done:
+            self.bucket_idx = self.broker.rl_algo.bucket_idx
+            t = self.broker.benchmark_algo.algo_events[self.state_idx]
+            self.state = self._build_observation_at_event(event_time=t)
+        else:
+            t = conv2date(self.broker.trade_logs["rl_algo"][-1]["timestamp"])
+            self.state = self._build_observation_at_event(event_time=t)
 
         return self.state, self.reward, self.done, self.info
 
@@ -252,6 +254,7 @@ class BaseEnv(gym.Env, ABC):
             if algo_type == 'benchmark':
                 self.event_bmk_bucket = event
                 self.bucket_time_bmk = self.broker.trade_logs["benchmark_algo"][-1]["timestamp"]
+                self.state_idx += 1
             else:
                 self.event_rl_bucket = event
                 self.bucket_time_rl = self.broker.trade_logs["rl_algo"][-1]["timestamp"]
@@ -308,8 +311,8 @@ class BaseEnv(gym.Env, ABC):
     def _build_observation_at_event(self, event_time):
         """ Helper to pass only copy of datafeed/make sure datafeed is only affected by broker class """
 
-        feed = copy.copy(self.broker.data_feed)
-        obs = self.build_observation(event_time, feed)
+        # feed = copy.copy(self.broker.data_feed)
+        obs = self.build_observation(event_time, self.broker.data_feed)
         return obs
 
     def build_observation(self, event_time, data_feed):
@@ -318,19 +321,23 @@ class BaseEnv(gym.Env, ABC):
         data_feed.reset(time=event_time.strftime("%H:%M:%S.%f"))
         past_dts, past_lobs = data_feed.past_lob_snapshots(no_of_past_lobs=self.config['obs_config']['nr_of_lobs'])
 
-        # check if we already have enough data collected in our
+        # check if we already have enough data collected in our hist
+        """
         lob_bools = [True if dt in self.broker.hist_dict['rl']['timestamp'] else False for dt in past_dts]
         lob_hist = []
         for idx in range(len(past_dts)):
             lob_hist.append(
                 self.broker.hist_dict['rl']['lob'][self.broker.hist_dict['rl']['timestamp'].index(past_dts[idx])]
                 if lob_bools[idx] else past_lobs[idx])
+        """
 
         obs = np.array([])
         if self.config['obs_config']['norm']:
-            mid = (lob_hist[-1].get_best_ask() + lob_hist[-1].get_best_bid()) / 2
+            # mid = (lob_hist[-1].get_best_ask() + lob_hist[-1].get_best_bid()) / 2
+            mid = (past_lobs[-1].get_best_ask() + past_lobs[-1].get_best_bid()) / 2
             self.mid_pxs.append(float(mid))
-            for lob in lob_hist[-self.config['obs_config']['nr_of_lobs']:]:
+            # for lob in lob_hist:
+            for lob in past_lobs:
                 # TODO: Right now both prices and volumes are normalized, however we show the agent the unnormalized volume, wouldn't it make more sense to not normalize the volume so that it can find the relationship between those quantities?
                 obs = np.concatenate((obs, lob_to_numpy(lob,
                                                         depth=self.config['obs_config']['lob_depth'],
@@ -338,16 +345,17 @@ class BaseEnv(gym.Env, ABC):
                                                         norm_vol_bid=None,
                                                         norm_vol_ask=None)), axis=0)
             obs = np.concatenate((obs,
-                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),
+                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.bucket_idx]]),
                                   # vol left to trade in the bucket
                                   np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx - 1])),
                                  axis=0)  # orders left to place in the bucket
         else:
-            for lob in lob_hist[-self.config['obs_config']['nr_of_lobs']:]:
+            # for lob in lob_hist:
+            for lob in past_lobs:
                 obs = np.concatenate(obs, (lob_to_numpy(lob,
                                                         depth=self.config['obs_config']['lob_depth'])), axis=0)
             obs = np.concatenate((obs,
-                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]]),
+                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.bucket_idx]]),
                                   # vol left to trade in the bucket
                                   np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx - 1])),
                                  axis=0)  # orders left to place in the bucket
