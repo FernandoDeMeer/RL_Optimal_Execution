@@ -79,8 +79,6 @@ class BaseEnv(gym.Env, ABC):
         self.action_space = action_space
         self.seed()
 
-        self.broker.mid_pxs = []
-
     def reset(self):
         """ Reset the environment """
 
