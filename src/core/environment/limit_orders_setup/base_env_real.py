@@ -173,7 +173,7 @@ class BaseEnv(gym.Env, ABC):
     def _reset_volume_and_slices(self):
         """ May deserve own method since its most important part of resetting/can be easily overridden. """
 
-        exec_time = random.choice(self.config['exec_config']['exec_times'])
+        exec_time = random.choice(self.config['exec_config']['exec_times']) - min(self.config['exec_config']['exec_times'])
         perc = exec_time / (max(self.config['exec_config']['exec_times']) -
                             min(self.config['exec_config']['exec_times']))
         volume = round(self.config['trade_config']['vol_low'] + perc * (self.config['trade_config']['vol_high'] -
@@ -285,7 +285,7 @@ class BaseEnv(gym.Env, ABC):
 
         """
             The bounds are as follows (if we allow normalisation of past LOB snapshots by current LOB data):
-                Inf > bids_price <= 0,
+                Inf > bids_price >= 0,
                 Inf > asks_price > 0,
                 Inf > bids_volume >= 0,
                 Inf > asks_volume >= 0,
@@ -383,13 +383,13 @@ class BaseEnv(gym.Env, ABC):
             raise ValueError("'lob_depth' must be < 20")
 
         if self.config['trade_config']['vol_low'] > self.config['trade_config']['vol_high']:
-            raise ValueError("'vol_low' must be larger than 'vol_high'")
+            raise ValueError("'vol_high' must be larger than 'vol_low'")
 
         if self.config['trade_config']['no_slices_low'] > self.config['trade_config']['no_slices_high']:
-            raise ValueError("'no_slices_low' must be larger than 'no_slices_high'")
+            raise ValueError("'no_slices_high' must be larger than 'no_slices_low'")
 
         if self.config['trade_config']['rand_bucket_low'] > self.config['trade_config']['rand_bucket_high']:
-            raise ValueError("'rand_bucket_low' must be larger than 'rand_bucket_high'")
+            raise ValueError("'rand_bucket_high' must be larger than 'rand_bucket_low'")
 
         if self.config['start_config']['hour_low'] > self.config['start_config']['hour_high']:
             raise ValueError("'hour_high' must be larger than 'hour_low'")
