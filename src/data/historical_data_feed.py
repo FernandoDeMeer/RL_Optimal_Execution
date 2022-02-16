@@ -1,4 +1,4 @@
-import random
+import warnings
 import copy
 import calendar
 import numpy as np
@@ -12,14 +12,16 @@ def get_time_idx_from_raw_data(data, t):
     """ Returns the index of data right before a given time 't' """
 
     dt = datetime.utcfromtimestamp(data[-1] / 1000)
-    start_t = datetime.strptime(t, '%H:%M:%S') # TODO: We are operating at the second magnitude, maybe once we load all data it makes more sense to include milliseconds)
-    start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second)
+    try:
+        start_t = datetime.strptime(t, '%H:%M:%S.%f')
+    except:
+        start_t = datetime.strptime(t, '%H:%M:%S')
+    start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second, start_t.microsecond)
     unix_t = calendar.timegm(start_dt.utctimetuple()) * 1e3 + start_dt.microsecond / 1e3
     idx = (np.abs(data - unix_t)).argmin()
     # These two lines were giving the lob_snapshot previous to dt, when it should be the one after If we are placing trades (to account for computing time/latency etc)
     while data[idx] <= unix_t:
         idx = idx + 1
-
     return idx
 
 
@@ -36,16 +38,13 @@ class HistoricalDataFeed(DataFeed):
     def __init__(self,
                  data_dir,
                  instrument,
-                 first_time=None,
-                 last_time=None,
                  start_day=None,
                  end_day=None,
                  time=None,
-                 samples_per_file=1,
                  lob_depth=20):
 
         self.data_dir = data_dir
-        # self.instrument = instrument
+        self.instrument = instrument
 
         self.start_day = start_day
         self.end_day = end_day
@@ -70,26 +69,25 @@ class HistoricalDataFeed(DataFeed):
         self.data = None
 
         self.binary_file_idx = 0
-        self.binary_file_idx_prev = None
         self.data_row_idx = None
         self._remaining_rows_in_file = None
-        self.samples_per_file = samples_per_file
-        self._samples_drawn = 0
 
         self.lob_depth = lob_depth
-        self.time = time
-        self.first_time = first_time
-        self.last_time = last_time
-        self.reset(time, first_time, last_time)
+        self._load_data()
+        self.reset(time)
 
     def next_lob_snapshot(self, previous_lob_snapshot=None, lob_format=True):
         """ return next snapshot of the limit order book """
+
+        assert self.binary_file_idx >= 0, (
+            'hard reset() must be applied once before next_lob_snapshot(), if called via broker reset with hard=True!')
 
         assert self._remaining_rows_in_file is not None, (
             'reset() must be called once before next_lob_snapshot()')
 
         if self._remaining_rows_in_file <= 0:
-            self.reset(self.time, self.first_time, self.last_time)
+            warnings.warn("Datafeed reached end of file, reset to initial time. Make sure this was intended! ")
+            self.reset(self.time)
 
         lob = copy.deepcopy(self.data[self.data_row_idx])
 
@@ -127,34 +125,20 @@ class HistoricalDataFeed(DataFeed):
                 output.append(lob.reshape(-1, self.lob_depth))
             return timestamp_dts, output
 
-    def reset(self, time=None, first_time=None, last_time=None):
+    def reset(self, time=None):
         """ Reset the datafeed and set from where to start sampling """
 
         self.time = time
-        if first_time is not None:
-            self.first_time = first_time
-        if last_time is not None:
-            self.last_time = last_time
-        self.binary_file_idx_prev = self.binary_file_idx
+        self._select_row_idx()
 
-        if self._samples_drawn < self.samples_per_file:
-            # ...draw 'samples_per_file' amounts from same file before moving on
-            self._samples_drawn += 1
-        else:
-            # if drawn enough, move on to the next file
-            self._samples_drawn = 1
-            self.binary_file_idx += 1
+    def next_data(self):
+        """ Jumps to next file and loads data """
 
-        # start from beginning, if end is reached
+        self.binary_file_idx += 1
         if self.binary_file_idx > len(self.binary_files) - 1:
             self.binary_file_idx = 0
-
-        # load new data from file if required
-        # if self.binary_file_idx_prev != self.binary_file_idx or self.data is None:
         self._load_data()
-
-        # select data based on actual dates
-        self._select_row_idx()
+        self.reset()
 
     def _load_data(self):
         """ Load data from file """
@@ -165,20 +149,27 @@ class HistoricalDataFeed(DataFeed):
     def _select_row_idx(self):
         """ method specifically selecting 'data_row_idx' and '_remaining_rows_in_file' """
 
-        # 'time' has highest priority
         if self.time is not None:
             # always start sampling from 'time'
             idx = get_time_idx_from_raw_data(self.data[:, 0], self.time)
         else:
-            # if 'time' not defined, check for both 'first_time' and 'last_time'
-            if self.first_time and self.last_time is not None:
-                # randomly sample between 'first_time' and 'last_time'
-                idx_start = get_time_idx_from_raw_data(self.data[:, 0], self.first_time)
-                idx_end = get_time_idx_from_raw_data(self.data[:, 0], self.last_time)
-                idx = random.randint(idx_start, idx_end)
-            else:
-                # otherwise just start from the beginning
-                idx = 0
+            # otherwise just start from the beginning
+            idx = 0
 
         self.data_row_idx = idx
         self._remaining_rows_in_file = self.data.shape[0] - idx
+
+    def __eq__(self, other):
+        if self.__class__ == other.__class__:
+            for k, v in self.__dict__.items():
+                try:
+                    tst = v == other.__dict__[k]
+                    if not tst:
+                        return False
+                except:
+                    tst = (v == other.__dict__[k]).any()
+                    if not tst:
+                        return False
+            return True
+        else:
+            raise TypeError('Comparing object is not of the same type.')

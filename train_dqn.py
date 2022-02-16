@@ -14,7 +14,7 @@ from ray.tune.logger import pretty_print
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,12 +26,12 @@ def init_arg_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="lob_env")
-    parser.add_argument("--num-cpus", type=int, default=1)
+    parser.add_argument("--num-cpus", type=int, default=0)
 
     parser.add_argument(
         "--framework",
         choices=["tf", "torch"],
-        default="torch",
+        default="tf",
         help="The DL framework specifier.")
 
     parser.add_argument(
@@ -49,13 +49,13 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=1,
+        default=100,
         help="Number of episodes to train.")
 
     parser.add_argument(
         "--no-tune",
         type=bool,
-        default=False,
+        default=True,
         help="Run without Tune using a manual train loop instead.")
 
     parser.add_argument(
@@ -73,7 +73,7 @@ def init_arg_parser():
     return parser.parse_args()
 
 
-class TradingEnvDQN(BaseEnv):
+class TradingEnvDQN(RewardAtStepEnv):
     def _convert_action(self, action):
         return action / self.action_space.n
 
@@ -91,8 +91,7 @@ def lob_env_creator(env_config):
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(DATA_DIR, "market", env_config['train_config']["symbol"]),
                                   instrument=env_config['train_config']["symbol"],
                                   start_day=data_start_day,
-                                  end_day=data_end_day,
-                                  samples_per_file=200)
+                                  end_day=data_end_day)
 
     exclude_keys = {'train_config'}
     env_config_clean = {k: env_config[k] for k in set(list(env_config.keys())) - set(exclude_keys)}
@@ -148,6 +147,7 @@ if __name__ == "__main__":
         "num_envs_per_worker": 1,
         "framework": args.framework,
         "evaluation_interval": 10,
+        "train_batch_size": 200,
         # Number of episodes to run per evaluation period.
         "evaluation_num_episodes": 1,
         "evaluation_config": {
@@ -166,7 +166,22 @@ if __name__ == "__main__":
                                      "symbol": args.symbol,
                                      "train_data_periods": [2021, 6, 21, 2021, 6, 21],
                                      "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
-                                 }}
+                                 },
+                                 'trade_config': {'trade_direction': 1,
+                                                  'vol_low': 500,
+                                                  'vol_high': 500,
+                                                  'no_slices_low': 4,
+                                                  'no_slices_high': 4,
+                                                  'bucket_func': lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
+                                                  'rand_bucket_low': 0,
+                                                  'rand_bucket_high': 0},
+                                 'start_config': {'hour_low': 12,
+                                                  'hour_high': 12,
+                                                  'minute_low': 0,
+                                                  'minute_high': 0,
+                                                  'second_low': 0,
+                                                  'second_high': 0},
+                                 'exec_config': {'exec_times': [10]}}
                 }
     config.update(env_config)
 
@@ -177,9 +192,11 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
+    """
     session_container_path = init_session_container(args.session_id)
     with open(os.path.join(session_container_path, "config.json"), "a", encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
+    """
 
     if args.no_tune:
 
