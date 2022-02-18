@@ -25,12 +25,13 @@ DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                        'rand_bucket_low': 0,
                                        'rand_bucket_high': 0},
                       'start_config': {'hour_low': 1,
-                                       'hour_high': 22,
+                                       'hour_high': 19,
                                        'minute_low': 0,
                                        'minute_high': 59,
                                        'second_low': 0,
                                        'second_high': 59},
-                      'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240]},
+                      'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240],
+                                      'delete_vol': False},
                       'reset_config': {'reset_num_episodes': 1,
                                        'samples_per_feed': 20,
                                        'reset_feed': True}}
@@ -85,7 +86,8 @@ class BaseEnv(gym.Env, ABC):
         # Randomize inputs to the execution algo
         if self.reset_counter >= self.config['reset_config']['reset_num_episodes'] or self.reset_counter == 0:
             self.start_time, self.exec_time, self.volume, self.no_of_slices, \
-            self.trade_dir, self.rand_bucket_bounds_width, self.bucket_func = self._reset_exec_params()
+            self.trade_dir, self.rand_bucket_bounds_width, self.bucket_func, self.delete_vol = self._reset_exec_params()
+            self.broker.delete_vol = self.delete_vol
             self.reset_counter = 0
         self.reset_counter += 1
 
@@ -163,19 +165,24 @@ class BaseEnv(gym.Env, ABC):
             no_of_slices = random.randint(self.config['trade_config']['no_slices_low'],
                                           self.config['trade_config']['no_slices_high'])
 
+        if (datetime.strptime(start_time, '%H:%M:%S') + timedelta(minutes=exec_time)).day != \
+                datetime.strptime(start_time, '%H:%M:%S').day:
+            raise ValueError("Execution can't jump between days !!!")
+
         trade_dir = self.config['trade_config']['trade_direction']
         rand_bucket_bounds_width = random.randint(self.config['trade_config']['rand_bucket_low'],
                                                   self.config['trade_config']['rand_bucket_high'])
         bucket_func = self.config['trade_config']['bucket_func']
+        delete_vol = self.config['exec_config']['delete_vol']
 
-        return start_time, exec_time, volume, no_of_slices, trade_dir, rand_bucket_bounds_width, bucket_func
+        return start_time, exec_time, volume, no_of_slices, trade_dir, rand_bucket_bounds_width, bucket_func, delete_vol
 
     def _reset_volume_and_slices(self):
         """ May deserve own method since its most important part of resetting/can be easily overridden. """
 
-        exec_time = random.choice(self.config['exec_config']['exec_times']) - min(self.config['exec_config']['exec_times'])
-        perc = exec_time / (max(self.config['exec_config']['exec_times']) -
-                            min(self.config['exec_config']['exec_times']))
+        exec_time = random.choice(self.config['exec_config']['exec_times'])
+        perc = (exec_time - min(self.config['exec_config']['exec_times'])) / (max(self.config['exec_config']['exec_times']) -
+                                                                            min(self.config['exec_config']['exec_times']))
         volume = round(self.config['trade_config']['vol_low'] + perc * (self.config['trade_config']['vol_high'] -
                                                                         self.config['trade_config']['vol_low']))
         no_of_slices = round(self.config['trade_config']['no_slices_low'] +
@@ -225,9 +232,13 @@ class BaseEnv(gym.Env, ABC):
         if not self.done:
             self.bucket_idx = self.broker.rl_algo.bucket_idx
             t = self.broker.benchmark_algo.algo_events[self.state_idx]
+            if t in self.broker.benchmark_algo.buckets.bucket_bounds:
+                raise ValueError("Can't build an observation at a bucket end!")
             self.state = self._build_observation_at_event(event_time=t)
         else:
             t = conv2date(self.broker.trade_logs["rl_algo"][-1]["timestamp"])
+            if t in self.broker.benchmark_algo.buckets.bucket_bounds:
+                raise ValueError("Can't build an observation at a bucket end!")
             self.state = self._build_observation_at_event(event_time=t)
 
         return self.state, self.reward, self.done, self.info
@@ -402,6 +413,9 @@ class BaseEnv(gym.Env, ABC):
 
         if self.config['start_config']['second_low'] > self.config['start_config']['second_high']:
             raise ValueError("'second_high' must be larger than 'second_low'")
+
+        if type(self.config['exec_config']['delete_vol']) != bool:
+            raise ValueError('Deleting volume flag must be a Boolean!')
 
     @staticmethod
     def add_default_dict(config):

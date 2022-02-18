@@ -53,9 +53,8 @@ class Bucket:
         self.start_time = start_time
         self.end_time = end_time
         self.duration = self.end_time - self.start_time
-        if self.duration.days < 0:
-            self.end_time = self.end_time + timedelta(days=1)
-            self.duration = self.end_time - self.start_time
+        if self.duration.total_seconds() < 0:
+            raise ValueError("start_time can't take place before end_time")
         self.bucket_width = self._bucket_size(self.duration)
         self.bucket_bounds(rand_width)
 
@@ -315,9 +314,8 @@ class TWAPAlgo(ExecutionAlgo):
         # get execution times and split volume across orders/check
         self._sample_execution_times()
         self._split_volume_within_buckets()
-        # TODO: This ValueError is sometimes raised due to rounding errors, won't affect the Env much, I suggest to comment it out.
-        # if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
-        #     raise ValueError("Volumes split across orders didn't work out!")
+        if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
+            raise ValueError("Volumes split across orders didn't work out!")
         self.bmk_vwap = 0
 
     def _split_volume_across_buckets(self):

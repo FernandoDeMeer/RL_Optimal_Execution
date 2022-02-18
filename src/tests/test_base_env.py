@@ -63,7 +63,8 @@ class TestBaseEnvLogic(unittest.TestCase):
                                    'minute_high': 0,
                                    'second_low': 0,
                                    'second_high': 0},
-                  'exec_config': {'exec_times': [1]},
+                  'exec_config': {'exec_times': [1],
+                                  'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
                                    'reset_feed': True}}
@@ -176,7 +177,8 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                    'minute_high': 0,
                                    'second_low': 0,
                                    'second_high': 0},
-                  'exec_config': {'exec_times': [1]},
+                  'exec_config': {'exec_times': [1],
+                                  'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
                                    'reset_feed': True}}
@@ -276,7 +278,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                    'minute_high': 0,
                                    'second_low': 0,
                                    'second_high': 0},
-                  'exec_config': {'exec_times': [1]},
+                  'exec_config': {'exec_times': [1],
+                                  'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
                                    'reset_feed': True}}
@@ -375,7 +378,8 @@ class TestTwoSlices(unittest.TestCase):
                                    'minute_high': 0,
                                    'second_low': 0,
                                    'second_high': 0},
-                  'exec_config': {'exec_times': [1]},
+                  'exec_config': {'exec_times': [1],
+                                  'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
                                    'reset_feed': True}}
