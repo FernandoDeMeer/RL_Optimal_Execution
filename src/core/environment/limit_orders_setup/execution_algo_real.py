@@ -224,7 +224,7 @@ class ExecutionAlgo:
         if trade_log is not None and trade_log['quantity'] > 0:
             self.vol_remaining -= Decimal(str(trade_log['quantity']))
             self.bucket_vol_remaining[self.bucket_idx] -= Decimal(str(trade_log['quantity']))
-        # TODO: Currently this ValueError is sometimes raised due to rounding errors, right now it allows for 1 tick of rounding error per bucket
+        # TODO: This Error doesn't get raised during tests but it stops train_app.py, I'm guessing it has to do with the reset of self.vol_remaining
         if self.vol_remaining < -self.tick_size * len(self.bucket_volumes) or self.bucket_vol_remaining[self.bucket_idx] < -self.tick_size:
             raise ValueError("More volume than available placed!")
 

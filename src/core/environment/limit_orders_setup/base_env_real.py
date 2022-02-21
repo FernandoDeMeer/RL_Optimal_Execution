@@ -483,6 +483,9 @@ class RewardAtStepEnv(BaseEnv):
         try:
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
                                                                 end_date=self.event_time)
+            self.broker.benchmark_algo.bmk_vwap = vwap_bmk
+            self.broker.rl_algo.rl_vwap = vwap_rl
+
             if self.trade_dir == 1:
                 reward = vwap_bmk / vwap_rl
             else:
@@ -502,6 +505,8 @@ class RewardAtBucketEnv(BaseEnv):
             if self.bucket_time != self.bucket_time_prev:
                 vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
                                                                     end_date=self.bucket_time)
+                self.broker.benchmark_algo.bmk_vwap = vwap_bmk
+                self.broker.rl_algo.rl_vwap = vwap_rl
                 if self.trade_dir == 1:
                     reward = vwap_bmk / vwap_rl
                 else:
@@ -520,6 +525,8 @@ class RewardAtEpisodeEnv(BaseEnv):
         try:
             if self.done:
                 vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
+                self.broker.benchmark_algo.bmk_vwap = vwap_bmk
+                self.broker.rl_algo.rl_vwap = vwap_rl
                 if self.trade_dir == 1:
                     reward = vwap_bmk / vwap_rl
                 else:

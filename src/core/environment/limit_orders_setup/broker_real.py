@@ -195,6 +195,8 @@ class Broker(ABC):
                             log = self.place_orders(order_temp_bmk,type(algo).__name__)
                             algo.vol_remaining -= Decimal(str(log['quantity']))
                             algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            if algo.vol_remaining < -algo.tick_size * len(algo.bucket_volumes) or algo.bucket_vol_remaining[algo.bucket_idx-1] < -algo.tick_size:
+                                raise ValueError("More volume than available placed!")
                             self.current_dt_bmk = dt
                         else:
                             # We have reached the next order placement without having fully executed our market order
@@ -209,7 +211,6 @@ class Broker(ABC):
                             else:
                                 # We add the volume to the next event
                                 self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += self.remaining_order['benchmark_algo'][0]['quantity']
-                                self.benchmark_algo.vol_remaining -= self.remaining_order['benchmark_algo'][0]['quantity']
                                 self.remaining_order['benchmark_algo'] = []
                 else:
                     # We are at the last bucket of the episode
@@ -231,6 +232,8 @@ class Broker(ABC):
                             log = self.place_orders(order_temp_bmk,type(algo).__name__)
                             algo.vol_remaining -= Decimal(str(log['quantity']))
                             algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            if algo.vol_remaining < -algo.tick_size * len(algo.bucket_volumes) or algo.bucket_vol_remaining[algo.bucket_idx-1] < -algo.tick_size:
+                                raise ValueError("More volume than available placed!")
                             self.current_dt_bmk = dt
 
 
@@ -248,6 +251,9 @@ class Broker(ABC):
                             log = self.place_orders(order_temp_rl,type(algo).__name__)
                             algo.vol_remaining -= Decimal(str(log['quantity']))
                             algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            if algo.vol_remaining < -algo.tick_size * len(algo.bucket_volumes) or algo.bucket_vol_remaining[algo.bucket_idx-1] < -algo.tick_size:
+                                raise ValueError("More volume than available placed!")
+
                             self.current_dt_rl = dt
                         else:
                             # We have reached the next order placement without having fully executed our market order
@@ -262,7 +268,6 @@ class Broker(ABC):
                             else:
                                 # We add the volume to the next event
                                 self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += self.remaining_order['rl_algo'][0]['quantity']
-                                self.rl_algo.vol_remaining -= self.remaining_order['rl_algo'][0]['quantity']
                                 self.remaining_order['rl_algo'] = []
                 else:
                     # We are at the last bucket of the episode
@@ -283,6 +288,9 @@ class Broker(ABC):
                             log = self.place_orders(order_temp_rl,type(algo).__name__)
                             algo.vol_remaining -= Decimal(str(log['quantity']))
                             algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            if algo.vol_remaining < -algo.tick_size * len(algo.bucket_volumes) or algo.bucket_vol_remaining[algo.bucket_idx-1] < -algo.tick_size:
+                                raise ValueError("More volume than available placed!")
+
                             self.current_dt_rl = dt
 
         if type(algo).__name__ != 'RLAlgo':
@@ -401,12 +409,12 @@ class Broker(ABC):
         if len(self.trade_logs['benchmark_algo']) != 0:
             bmk_vwap = self._calc_vwap(self.trade_logs['benchmark_algo'][start_idx_bmk:end_idx_bmk])
         else:
-            bmk_vwap = 0
+            bmk_vwap = 1e-08
 
         if len(self.trade_logs['rl_algo']) != 0:
             rl_vwap = self._calc_vwap(self.trade_logs['rl_algo'][start_idx_rl:end_idx_rl])
         else:
-            rl_vwap = 0
+            rl_vwap = 1e-08
 
         return bmk_vwap, rl_vwap
 
