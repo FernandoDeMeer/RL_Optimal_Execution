@@ -265,8 +265,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                  "nr_of_lobs": 5,
                                  "norm": True},
                   'trade_config': {'trade_direction': 1,
-                                   'vol_low': 25,
-                                   'vol_high': 25,
+                                   'vol_low': 500,
+                                   'vol_high': 500,
                                    'no_slices_low': 1,
                                    'no_slices_high': 1,
                                    'bucket_func': lambda no_of_slices: 0.5,
@@ -295,7 +295,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                           action_space=action_space)
 
     algo = TWAPAlgo(trade_direction=1,
-                    volume=25,
+                    volume=500,
                     start_time='09:00:00',
                     end_time='09:01:00',
                     no_of_slices=1,
@@ -306,6 +306,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
 
         # define the broker class
         broker = Broker(self.lob_feed)
+        broker.delete_vol = self.env_config["exec_config"]["delete_vol"]
         broker.benchmark_algo = self.algo
         broker.simulate_algo(self.algo)
 
@@ -316,7 +317,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
             s, r, done, i = self.base_env.step(action=np.array([0]))
             reward_vec.append(r)
 
-        # now trade logs from stepping through env and trade logs from simulateion must be the same...
+        # now trade logs from stepping through env and trade logs from simulation must be the same...
         self.assertEqual(broker.trade_logs["benchmark_algo"],
                          self.base_env.broker.trade_logs["benchmark_algo"],
                          'Trading history is not the same btw env stepping and broker simulation')
@@ -349,7 +350,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
 
         vwap_bmk, vwap_rl = self.base_env.broker.calc_vwap_from_logs()
         self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS must be the same')
-        self.assertEqual(vwap_bmk, 32876.9147788, 'VWAP was 32876.9147788 before')
+        # self.assertEqual(vwap_bmk, 32876.9147788, 'VWAP was 32876.9147788 before')
 
 
 class TestTwoSlices(unittest.TestCase):

@@ -186,32 +186,33 @@ class Broker(ABC):
             if self.remaining_order['benchmark_algo'][0]['type'] == 'market':
                 # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
                 if self.benchmark_algo.bucket_idx < self.benchmark_algo.buckets.n_buckets:
-                    while len(self.remaining_order['benchmark_algo'])!= 0 and self.hist_dict['benchmark']['timestamp'][-1] < \
-                            self.benchmark_algo.execution_times[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx]:
+                    while len(self.remaining_order['benchmark_algo'])!= 0:
                         dt, lob = self.data_feed.next_lob_snapshot()
-                        self._record_lob(dt, lob, algo)
-                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                        # place the orders and update the remaining quantities to trade in the algo
-                        log = self.place_orders(order_temp_bmk,type(algo).__name__)
-                        algo.vol_remaining -= Decimal(str(log['quantity']))
-                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
-                        self.current_dt_bmk = dt
-                    if len(self.remaining_order['benchmark_algo'])!= 0:
-                        # We have reached the next order placement without having fully executed our market order
-                        if self.delete_vol:
-                            # We delete the unexecuted volume from the algo
-                            try:
-                                self.benchmark_algo.unexecuted_vol += self.remaining_order['benchmark_algo'][0]['quantity']
-                            except:
-                                self.benchmark_algo.unexecuted_vol = self.remaining_order['benchmark_algo'][0]['quantity']
-                            self.benchmark_algo.vol_remaining -= self.remaining_order['benchmark_algo'][0]['quantity']
-                            self.remaining_order['benchmark_algo'] = []
+                        if dt < self.benchmark_algo.execution_times[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx]:
+                            self._record_lob(dt, lob, algo)
+                            order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                            # place the orders and update the remaining quantities to trade in the algo
+                            log = self.place_orders(order_temp_bmk,type(algo).__name__)
+                            algo.vol_remaining -= Decimal(str(log['quantity']))
+                            algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            self.current_dt_bmk = dt
                         else:
-                            # We add the volume to the next event
-                            self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += self.remaining_order['benchmark_algo'][0]['quantity']
-                            self.benchmark_algo.vol_remaining -= self.remaining_order['benchmark_algo'][0]['quantity']
-                            self.remaining_order['benchmark_algo'] = []
+                            # We have reached the next order placement without having fully executed our market order
+                            if self.delete_vol:
+                                # We delete the unexecuted volume from the algo
+                                try:
+                                    self.benchmark_algo.unexecuted_vol += self.remaining_order['benchmark_algo'][0]['quantity']
+                                except:
+                                    self.benchmark_algo.unexecuted_vol = self.remaining_order['benchmark_algo'][0]['quantity']
+                                self.benchmark_algo.vol_remaining -= self.remaining_order['benchmark_algo'][0]['quantity']
+                                self.remaining_order['benchmark_algo'] = []
+                            else:
+                                # We add the volume to the next event
+                                self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += self.remaining_order['benchmark_algo'][0]['quantity']
+                                self.benchmark_algo.vol_remaining -= self.remaining_order['benchmark_algo'][0]['quantity']
+                                self.remaining_order['benchmark_algo'] = []
                 else:
+                    # We are at the last bucket of the episode
                     if self.delete_vol:
                         # We delete the unexecuted volume from the algo
                         try:
@@ -238,32 +239,33 @@ class Broker(ABC):
             if self.remaining_order['rl_algo'][0]['type'] == 'market':
                 # We have a market order that didn't fully execute, so we place it again on subsequent LOBs until it is fully executed.
                 if self.rl_algo.bucket_idx < self.rl_algo.buckets.n_buckets:
-                    while len(self.remaining_order['rl_algo'])!= 0 and self.hist_dict['rl']['timestamp'][-1] < \
-                            self.rl_algo.execution_times[self.rl_algo.bucket_idx][self.rl_algo.order_idx]:
+                    while len(self.remaining_order['rl_algo'])!= 0:
                         dt, lob = self.data_feed.next_lob_snapshot()
-                        self._record_lob(dt, lob, algo)
-                        order_temp_bmk, order_temp_rl = self._update_remaining_orders()
-                        # place the orders and update the remaining quantities to trade in the algo
-                        log = self.place_orders(order_temp_rl,type(algo).__name__)
-                        algo.vol_remaining -= Decimal(str(log['quantity']))
-                        algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
-                        self.current_dt_rl = dt
-                    if len(self.remaining_order['rl_algo'])!= 0:
-                        # We have reached the next order placement without having fully executed our market order
-                        if self.delete_vol:
-                            # We delete the unexecuted volume from the algo
-                            try:
-                                self.rl_algo.unexecuted_vol += self.remaining_order['rl_algo'][0]['quantity']
-                            except:
-                                self.rl_algo.unexecuted_vol = self.remaining_order['rl_algo'][0]['quantity']
-                            self.rl_algo.vol_remaining -= self.remaining_order['rl_algo'][0]['quantity']
-                            self.remaining_order['rl_algo'] = []
+                        if dt < self.rl_algo.execution_times[self.rl_algo.bucket_idx][self.rl_algo.order_idx]:
+                            self._record_lob(dt, lob, algo)
+                            order_temp_bmk, order_temp_rl = self._update_remaining_orders()
+                            # place the orders and update the remaining quantities to trade in the algo
+                            log = self.place_orders(order_temp_rl,type(algo).__name__)
+                            algo.vol_remaining -= Decimal(str(log['quantity']))
+                            algo.bucket_vol_remaining[algo.bucket_idx-1] -= Decimal(str(log['quantity']))
+                            self.current_dt_rl = dt
                         else:
-                            # We add the volume to the next event
-                            self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += self.remaining_order['rl_algo'][0]['quantity']
-                            self.rl_algo.vol_remaining -= self.remaining_order['rl_algo'][0]['quantity']
-                            self.remaining_order['rl_algo'] = []
+                            # We have reached the next order placement without having fully executed our market order
+                            if self.delete_vol:
+                                # We delete the unexecuted volume from the algo
+                                try:
+                                    self.rl_algo.unexecuted_vol += self.remaining_order['rl_algo'][0]['quantity']
+                                except:
+                                    self.rl_algo.unexecuted_vol = self.remaining_order['rl_algo'][0]['quantity']
+                                self.rl_algo.vol_remaining -= self.remaining_order['rl_algo'][0]['quantity']
+                                self.remaining_order['rl_algo'] = []
+                            else:
+                                # We add the volume to the next event
+                                self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += self.remaining_order['rl_algo'][0]['quantity']
+                                self.rl_algo.vol_remaining -= self.remaining_order['rl_algo'][0]['quantity']
+                                self.remaining_order['rl_algo'] = []
                 else:
+                    # We are at the last bucket of the episode
                     if self.delete_vol:
                         # We delete the unexecuted volume from the algo
                         try:
