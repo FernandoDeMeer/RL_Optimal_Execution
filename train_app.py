@@ -33,7 +33,7 @@ def init_arg_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="lob_env")
-    parser.add_argument("--num-cpus", type=int, default=1)
+    parser.add_argument("--num-cpus", type=int, default=2)
 
     parser.add_argument(
         "--framework",
@@ -67,23 +67,23 @@ def lob_env_creator(env_config):
     is_env_eval = env_config.num_workers == 0
 
     if is_env_eval:
-        data_periods = env_config["eval_data_periods"]
+        data_periods = env_config["train_config"]["eval_data_periods"]
     else:
-        data_periods = env_config["train_data_periods"]
+        data_periods = env_config["train_config"]["train_data_periods"]
 
     data_start_day = datetime.datetime(year=data_periods[0], month=data_periods[1], day=data_periods[2])
     data_end_day = datetime.datetime(year=data_periods[3], month=data_periods[4], day=data_periods[5])
 
-    lob_feed = HistoricalDataFeed(data_dir=os.path.join(DATA_DIR, "market", env_config["symbol"]),
-                                  instrument=env_config["symbol"],
+    lob_feed = HistoricalDataFeed(data_dir=os.path.join(DATA_DIR, "market", env_config["train_config"]["symbol"]),
+                                  instrument=env_config["train_config"]["symbol"],
                                   start_day=data_start_day,
                                   end_day=data_end_day)
 
     broker = Broker(lob_feed)
 
-    observation_space_config = {'obs_config': {'lob_depth': 5,
-                                               'nr_of_lobs': 5,
-                                               'norm': True}}
+    observation_space_config = {"obs_config": {"lob_depth": 5,
+                                               "nr_of_lobs": 5,
+                                               "norm": True}}
     action_space = gym.spaces.Box(low=0.0,
                                   high=1.0,
                                   shape=(1,),
@@ -141,8 +141,12 @@ if __name__ == "__main__":
 
     args = init_arg_parser()
 
-    # For debugging the env or other modules, set local_mode=True
-    ray.init(local_mode=True, num_cpus=args.num_cpus)
+    # For debugging the ENV or other modules, set local_mode=True
+    ray.init(num_cpus=args.num_cpus,
+             local_mode=False,
+             # local_mode=True,
+             )
+
     register_env("lob_env", lob_env_creator)
     ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
@@ -152,18 +156,58 @@ if __name__ == "__main__":
         # Number of GPUs to allocate to the trainer process. Note that not all
         # algorithms can take advantage of trainer GPUs. This can be fractional
         # (e.g., 0.3 GPUs).
-        # "num_gpus": 0,
-        "num_workers": args.num_cpus,
+        "num_gpus": 0,
+        "num_workers": args.num_cpus - 1,
         "num_envs_per_worker": 1,
-        # "rollout_fragment_length": 100,
-        "train_batch_size": 64,
+        # Size of batches collected from each worker.
+        "rollout_fragment_length": 200,
+        # Number of timesteps collected for each SGD round. This defines the size
+        # of each SGD epoch.
+        # DEFAULT train_batch_size: 4000
+        "train_batch_size": 1024,
+        # Total SGD batch size across all devices for SGD. This defines the
+        # minibatch size within each epoch.
         "sgd_minibatch_size": 32,
-        # "num_sgd_iter": 10,
+        # Number of SGD iterations in each outer loop (i.e., number of epochs to
+        # execute per train batch).
+        "num_sgd_iter": 30,
+        "lr": 5e-5,
         "entropy_coeff": 0.01,
-        # "lr_schedule": [
-        #     [0, 0.0005],
-        #     [10000000, 0.000000000001],
-        # ],
+        "lambda": 0.95,
+        "kl_coeff": 0.5,
+        "clip_param": 0.1,
+        "vf_share_layers": False,
+        "model": {
+            "custom_model": "end_to_end_model",
+            "custom_model_config": {"fcn_depth": 128,
+                                    "lstm_cells": 256},
+        },
+
+        "env_config": {"obs_config": {
+            "lob_depth": 5,
+            "nr_of_lobs": 5,
+            "norm": True},
+            "train_config": {
+                "train": True,
+                "symbol": args.symbol,
+                "train_data_periods": [2021, 6, 21, 2021, 6, 21],
+                "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+            },
+            "trade_config": {"trade_direction": 1,
+                             "vol_low": 500,
+                             "vol_high": 500,
+                             "no_slices_low": 4,
+                             "no_slices_high": 4,
+                             "bucket_func": lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
+                             "rand_bucket_low": 0,
+                             "rand_bucket_high": 0},
+            "start_config": {"hour_low": 12,
+                             "hour_high": 12,
+                             "minute_low": 0,
+                             "minute_high": 0,
+                             "second_low": 0,
+                             "second_high": 0},
+            "exec_config": {"exec_times": [10]}},
 
         # Eval
         "evaluation_interval": 10,
@@ -173,27 +217,12 @@ if __name__ == "__main__":
             "explore": False,
             "render_env": True,
         },
-        "lambda": 0.95,
-        "kl_coeff": 0.5,
-        "clip_param": 0.1,
-        "vf_share_layers": False,
-        "model": {
-            "custom_model": "end_to_end_model",
-            "custom_model_config": {'fcn_depth': 128,
-                                    'lstm_cells': 256},
-        },
-        "env_config": {
-            "symbol": args.symbol,
-            "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-            "eval_data_periods": [2021, 6, 21, 2021, 6, 22]
-        },
-        # ERROR
         "log_level": "WARN",
     }
 
     session_container_path = init_session_container(args.session_id)
-    with open(os.path.join(session_container_path, "config.json"), "a", encoding='utf-8') as f:
-        json.dump(config, f, ensure_ascii=False, indent=4)
+    # with open(os.path.join(session_container_path, "config.json"), "a", encoding="utf-8") as f:
+    #     json.dump(config, f, ensure_ascii=False, indent=4)
 
     experiment = tune.run(PPOTrainer,
                           config=config,
@@ -205,8 +234,8 @@ if __name__ == "__main__":
                           local_dir=session_container_path,
                           )
 
-    checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial('episode_reward_mean'),
-                                                         metric='episode_reward_mean')
+    checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial("episode_reward_mean"),
+                                                         metric="episode_reward_mean")
     checkpoint_path = checkpoints[0][0]
 
     reward = test_agent_one_episode(config=config,
