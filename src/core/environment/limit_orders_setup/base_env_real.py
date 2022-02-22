@@ -241,6 +241,11 @@ class BaseEnv(gym.Env, ABC):
                 raise ValueError("Can't build an observation at a bucket end!")
             self.state = self._build_observation_at_event(event_time=t)
 
+        if self.done:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
+            self.broker.benchmark_algo.bmk_vwap = vwap_bmk
+            self.broker.rl_algo.rl_vwap = vwap_rl
+
         return self.state, self.reward, self.done, self.info
 
     def _step_algo(self, algo_type, volume=None):
@@ -483,13 +488,10 @@ class RewardAtStepEnv(BaseEnv):
         try:
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
                                                                 end_date=self.event_time)
-            self.broker.benchmark_algo.bmk_vwap = vwap_bmk
-            self.broker.rl_algo.rl_vwap = vwap_rl
-
             if self.trade_dir == 1:
-                reward = vwap_bmk / vwap_rl
+                reward = vwap_bmk / vwap_rl - 1
             else:
-                reward = vwap_rl / vwap_bmk
+                reward = vwap_rl / vwap_bmk - 1
         except:
             reward = 0
         return reward
@@ -505,12 +507,10 @@ class RewardAtBucketEnv(BaseEnv):
             if self.bucket_time != self.bucket_time_prev:
                 vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
                                                                     end_date=self.bucket_time)
-                self.broker.benchmark_algo.bmk_vwap = vwap_bmk
-                self.broker.rl_algo.rl_vwap = vwap_rl
                 if self.trade_dir == 1:
-                    reward = vwap_bmk / vwap_rl
+                    reward = vwap_bmk / vwap_rl - 1
                 else:
-                    reward = vwap_rl / vwap_bmk
+                    reward = vwap_rl / vwap_bmk - 1
         except:
             reward = 0
         return reward
@@ -525,12 +525,10 @@ class RewardAtEpisodeEnv(BaseEnv):
         try:
             if self.done:
                 vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
-                self.broker.benchmark_algo.bmk_vwap = vwap_bmk
-                self.broker.rl_algo.rl_vwap = vwap_rl
                 if self.trade_dir == 1:
-                    reward = vwap_bmk / vwap_rl
+                    reward = vwap_bmk / vwap_rl - 1
                 else:
-                    reward = vwap_rl / vwap_bmk
+                    reward = vwap_rl / vwap_bmk - 1
         except:
             reward = 0
         return reward

@@ -211,6 +211,9 @@ class Broker(ABC):
                             else:
                                 # We add the volume to the next event
                                 self.benchmark_algo.volumes_per_trade[self.benchmark_algo.bucket_idx][self.benchmark_algo.order_idx] += self.remaining_order['benchmark_algo'][0]['quantity']
+                                # Move the volume between buckets
+                                self.benchmark_algo.bucket_vol_remaining[self.benchmark_algo.bucket_idx-1] -= self.remaining_order['benchmark_algo'][0]['quantity']
+                                self.benchmark_algo.bucket_vol_remaining[self.benchmark_algo.bucket_idx] += self.remaining_order['benchmark_algo'][0]['quantity']
                                 self.remaining_order['benchmark_algo'] = []
                 else:
                     # We are at the last bucket of the episode
@@ -268,6 +271,9 @@ class Broker(ABC):
                             else:
                                 # We add the volume to the next event
                                 self.rl_algo.volumes_per_trade[self.rl_algo.bucket_idx][self.rl_algo.order_idx] += self.remaining_order['rl_algo'][0]['quantity']
+                                # Move the volume between buckets
+                                self.rl_algo.bucket_vol_remaining[self.rl_algo.bucket_idx-1] -= self.remaining_order['rl_algo'][0]['quantity']
+                                self.rl_algo.bucket_vol_remaining[self.rl_algo.bucket_idx] += self.remaining_order['rl_algo'][0]['quantity']
                                 self.remaining_order['rl_algo'] = []
                 else:
                     # We are at the last bucket of the episode
@@ -409,12 +415,12 @@ class Broker(ABC):
         if len(self.trade_logs['benchmark_algo']) != 0:
             bmk_vwap = self._calc_vwap(self.trade_logs['benchmark_algo'][start_idx_bmk:end_idx_bmk])
         else:
-            bmk_vwap = 1e-08
+            bmk_vwap = 0
 
         if len(self.trade_logs['rl_algo']) != 0:
             rl_vwap = self._calc_vwap(self.trade_logs['rl_algo'][start_idx_rl:end_idx_rl])
         else:
-            rl_vwap = 1e-08
+            rl_vwap = 0
 
         return bmk_vwap, rl_vwap
 

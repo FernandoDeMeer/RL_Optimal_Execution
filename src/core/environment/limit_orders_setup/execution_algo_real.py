@@ -224,7 +224,7 @@ class ExecutionAlgo:
         if trade_log is not None and trade_log['quantity'] > 0:
             self.vol_remaining -= Decimal(str(trade_log['quantity']))
             self.bucket_vol_remaining[self.bucket_idx] -= Decimal(str(trade_log['quantity']))
-        # TODO: This Error doesn't get raised during tests but it stops train_app.py, I'm guessing it has to do with the reset of self.vol_remaining
+
         if self.vol_remaining < -self.tick_size * len(self.bucket_volumes) or self.bucket_vol_remaining[self.bucket_idx] < -self.tick_size:
             raise ValueError("More volume than available placed!")
 
@@ -316,7 +316,7 @@ class TWAPAlgo(ExecutionAlgo):
         self._split_volume_within_buckets()
         if abs(np.sum(self.volumes_per_trade) - self.volume) > self.tick_size:
             raise ValueError("Volumes split across orders didn't work out!")
-        self.bmk_vwap = 0
+        self.bmk_vwap = np.NaN
 
     def _split_volume_across_buckets(self):
         """ Aims to split volume across buckets as equal as possible """
@@ -369,4 +369,4 @@ class RLAlgo(ExecutionAlgo):
         self.event_idx = 0
         self.order_idx = 0
         self.bucket_idx = 0
-        self.rl_vwap = 0
+        self.rl_vwap = np.NaN
