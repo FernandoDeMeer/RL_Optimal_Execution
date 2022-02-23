@@ -18,7 +18,7 @@ from ray.rllib.agents.ppo import PPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
+from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAtStepEnv
 from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog
@@ -92,7 +92,7 @@ def lob_env_creator(env_config):
                                   shape=(1,),
                                   dtype=np.float32)
 
-    return RewardAtStepEnv(broker=broker,
+    return DollarRewardAtStepEnv(broker=broker,
                            config=observation_space_config,
                            action_space=action_space)
 
@@ -305,7 +305,7 @@ if __name__ == "__main__":
                                  "minute_low": 0,
                                  "minute_high": 59,
                                  "second_low": 0,
-                                 "second_high": 59},
+                                 "second_high": 0},
                 "exec_config": {"exec_times": [5, 10, 15],
                                 "delete_vol": False},
                 'reset_config': {'reset_num_episodes': 500 * 10,

@@ -556,3 +556,28 @@ class NarrowTradeLimitEnv(RewardAtStepEnv):
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
             vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         return vol_to_trade
+
+
+class DollarRewardAtStepEnv(BaseEnv):
+
+    def _convert_action(self, action):
+        """ Used if actions need to be transformed without having to change entire step() method """
+
+        action = action[0]
+        if math.isnan(action):
+            action = 1/self.broker.benchmark_algo.no_of_slices
+        return action
+
+    def reward_func(self):
+        """ Env with reward after each step as dollar improvement of VWAPs """
+
+        try:
+            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
+                                                                end_date=self.event_time)
+            if self.trade_dir == 1:
+                reward = vwap_bmk - vwap_rl
+            else:
+                reward = vwap_rl - vwap_bmk
+        except:
+            reward = 0
+        return reward
