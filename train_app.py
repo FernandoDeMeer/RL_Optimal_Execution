@@ -23,6 +23,9 @@ from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog
 
+## APPO/IMPALA
+from ray.rllib.agents.impala import impala
+##
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
@@ -56,7 +59,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=1000,
+        default=1000000,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -150,6 +153,8 @@ if __name__ == "__main__":
     register_env("lob_env", lob_env_creator)
     ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
+    """
+    Synchronous PPO
     config = {
         "env": args.env,
         "framework": args.framework,
@@ -219,12 +224,120 @@ if __name__ == "__main__":
         },
         "log_level": "WARN",
     }
+    """
 
+    ## Asynchronous PPO/IMPALA
+    config = impala.ImpalaTrainer.merge_trainer_configs(
+        impala.DEFAULT_CONFIG,  # See keys in impala.py, which are also supported.
+        {
+            # Whether to use V-trace weighted advantages. If false, PPO GAE
+            # advantages will be used instead.
+            "vtrace": True,
+
+            # == These two options only apply if vtrace: False ==
+            # Should use a critic as a baseline (otherwise don't use value
+            # baseline; required for using GAE).
+            "use_critic": True,
+            # If true, use the Generalized Advantage Estimator (GAE)
+            # with a value function, see https://arxiv.org/pdf/1506.02438.pdf.
+            "use_gae": True,
+            # GAE(lambda) parameter
+            "lambda": 1.0,
+
+            # == PPO surrogate loss options ==
+            "clip_param": 0.4,
+
+            # == PPO KL Loss options ==
+            "use_kl_loss": False,
+            "kl_coeff": 1.0,
+            "kl_target": 0.01,
+
+            # == IMPALA optimizer params (see documentation in impala.py) ==
+            "rollout_fragment_length": 50,
+            "train_batch_size": 500,
+            "min_iter_time_s": 10,
+            "num_workers": args.num_cpus - 1,
+            "num_gpus": 0,
+            "num_multi_gpu_tower_stacks": 1,
+            "minibatch_buffer_size": 1,
+            "num_sgd_iter": 1,
+            "replay_proportion": 0.0,
+            "replay_buffer_num_slots": 100,
+            "learner_queue_size": 16,
+            "learner_queue_timeout": 300,
+            "max_sample_requests_in_flight_per_worker": 2,
+            "broadcast_interval": 1,
+            "grad_clip": 40.0,
+            "opt_type": "adam",
+            "lr": 0.0005,
+            "lr_schedule": None,
+            # "lr_schedule": [[0, 0.01],
+            #                 [3000000, 0.01]],
+            "decay": 0.99,
+            "momentum": 0.0,
+            "epsilon": 0.1,
+            "vf_loss_coeff": 0.5,
+            "entropy_coeff": 0.01,
+            "entropy_coeff_schedule": None,
+
+            "env": "lob_env",
+            "env_config": {
+                "obs_config": {
+                    "lob_depth": 5,
+                    "nr_of_lobs": 5,
+                    "norm": True},
+                "train_config": {
+                    "train": True,
+                    "symbol": args.symbol,
+                    "train_data_periods": [2021, 6, 5, 2021, 6, 11],
+                    "eval_data_periods": [2021, 6, 12, 2021, 6, 14]
+                },
+                "trade_config": {"trade_direction": 1,
+                                 "vol_low": 100,
+                                 "vol_high": 300,
+                                 "no_slices_low": 4,
+                                 "no_slices_high": 4,
+                                 "bucket_func": lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
+                                 "rand_bucket_low": 0,
+                                 "rand_bucket_high": 0},
+                "start_config": {"hour_low": 1,
+                                 "hour_high": 22,
+                                 "minute_low": 0,
+                                 "minute_high": 59,
+                                 "second_low": 0,
+                                 "second_high": 59},
+                "exec_config": {"exec_times": [5, 10, 15],
+                                "delete_vol": False},
+                'reset_config': {'reset_num_episodes': 500 * 10,
+                                 'samples_per_feed': 500,
+                                 'reset_feed': True},
+            },
+
+            # Eval
+            "evaluation_interval": 10,
+            # Number of episodes to run per evaluation period.
+            "evaluation_num_episodes": 1,
+            "evaluation_config": {
+                "explore": False,
+                "render_env": True,
+            },
+            "model": {
+                "custom_model": "end_to_end_model",
+                "custom_model_config": {"fcn_depth": 128,
+                                        "lstm_cells": 256},
+            },
+            "log_level": "WARN",
+        },
+        _allow_unknown_configs=True,
+    )
+
+    ##
     session_container_path = init_session_container(args.session_id)
     # with open(os.path.join(session_container_path, "config.json"), "a", encoding="utf-8") as f:
     #     json.dump(config, f, ensure_ascii=False, indent=4)
 
-    experiment = tune.run(PPOTrainer,
+    # PPOTrainer
+    experiment = tune.run("APPO",
                           config=config,
                           metric="episode_reward_mean",
                           mode="max",
@@ -232,15 +345,17 @@ if __name__ == "__main__":
                           stop={"training_iteration": args.nr_episodes},
                           checkpoint_at_end=True,
                           local_dir=session_container_path,
+                          max_failures=-1
                           )
 
-    checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial("episode_reward_mean"),
-                                                         metric="episode_reward_mean")
-    checkpoint_path = checkpoints[0][0]
+    # checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial("episode_reward_mean"),
+    #                                                      metric="episode_reward_mean")
+    # checkpoint_path = checkpoints[0][0]
+    #
+    # reward = test_agent_one_episode(config=config,
+    #                                 agent_path=checkpoint_path,
+    #                                 eval_data_periods=[2021, 6, 21, 2021, 6, 21],
+    #                                 symbol="btcusdt")
+    # print(reward)
 
-    reward = test_agent_one_episode(config=config,
-                                    agent_path=checkpoint_path,
-                                    eval_data_periods=[2021, 6, 21, 2021, 6, 21],
-                                    symbol="btcusdt")
-    print(reward)
     ray.shutdown()

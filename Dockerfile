@@ -5,7 +5,7 @@ FROM tensorflow/tensorflow
 
 RUN export uid=1002 gid=1002
 
-ENV CUDA_VISIBLE_DEVICES=1
+ENV CUDA_VISIBLE_DEVICES=0
 
 #############################################
 
