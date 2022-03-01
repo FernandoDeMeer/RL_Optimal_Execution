@@ -1,6 +1,9 @@
 import numpy as np
 import os
 from os.path import isdir, isfile, join
+import numpy.ma as ma
+from itertools import zip_longest
+
 import ray
 from ray import tune
 from ray.tune.registry import register_env
@@ -16,11 +19,12 @@ from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAt
 from src.core.agent.ray_model import CustomRNNModel
 
 
-def eval_agent(trainer, env, nr_episodes, plot=True):
+def eval_agent(trainer, env, nr_episodes,session_dir, plot=True,):
 
     reward_vec = []
     vwap_bmk = []
     vwap_rl = []
+    vol_percentages = []
 
     for _ in tqdm(range(nr_episodes), desc="Evaluation of agent"):
         obs = env.reset()
@@ -35,17 +39,22 @@ def eval_agent(trainer, env, nr_episodes, plot=True):
         reward_vec.append(episode_reward)
         vwap_bmk.append(env.broker.benchmark_algo.bmk_vwap)
         vwap_rl.append(env.broker.rl_algo.rl_vwap)
+        vol_percentages.append(np.mean(np.array(env.broker.rl_algo.volumes_per_trade)/
+                                     np.array(env.broker.rl_algo.bucket_volumes)[:,None],axis= 0,dtype=np.float32))
 
     outperf = [True if vwap > vwap_rl[idx] else False for idx, vwap in enumerate(vwap_bmk)]
     vwap_perc_diff = (np.array(vwap_bmk)-np.array(vwap_rl)) / np.array(vwap_bmk)
     downside_median = np.median(vwap_perc_diff[outperf])
     upside_median = np.median(vwap_perc_diff[[not elem for elem in outperf]])
+    vol_percentages_avg, error_vol_percentages = tolerant_mean(vol_percentages)
 
     # after each episode, collect execution prices
     d_out = {'rewards': np.array(reward_vec),
              'vwap_bmk': np.array(vwap_bmk),
              'vwap_rl': np.array(vwap_rl),
-             'vwap_diff': vwap_perc_diff}
+             'vwap_diff': vwap_perc_diff,
+             'vol_percentages': np.array(vol_percentages_avg),
+             'vol_percentages_error': np.array(error_vol_percentages)}
     stats = {'percentage_outperformance': sum(outperf)/len(outperf),
              'downside_median': downside_median,
              'upside_median': upside_median}
@@ -66,7 +75,18 @@ def eval_agent(trainer, env, nr_episodes, plot=True):
         axs[1, 0].hist(d_out['vwap_diff'], density=True, bins=50)
         axs[1, 0].set_title('Difference of Benchmark vs. RL Execution Price')
         axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Probability')
+
+        axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),d_out['vol_percentages'],
+                      align='center',
+                      alpha=0.5,
+                      ecolor='black',
+                      capsize=10)
+        axs[1, 1].set_title('Average % of the volume executed per Order Placement in Bucket')
+        axs[1, 1].set(xlabel='Volume (%)', ylabel='Order Number')
+
         plt.show()
+
+    fig.savefig(session_dir + r"\evaluation_graphs.png")
 
     return d_out, stats
 
@@ -85,6 +105,14 @@ def get_session_best_checkpoint_path(session_path, session,):
     best_checkpoint = analysis.get_best_checkpoint(trial_logdir, metric="episode_reward_mean", mode="max")
 
     return best_checkpoint
+
+def tolerant_mean(arrs):
+    lens = [len(i) for i in arrs]
+    arr = np.ma.empty((np.max(lens),len(arrs)))
+    arr.mask = True
+    for idx, l in enumerate(arrs):
+        arr[:len(l),idx] = l
+    return arr.mean(axis = -1), arr.std(axis=-1)
 
 if __name__ == "__main__":
 
@@ -109,6 +137,6 @@ if __name__ == "__main__":
     agent.restore(checkpoint)
 
     env = lob_env_creator(env_config= config["env_config"])
-    eval_agent(trainer= agent,env= env ,nr_episodes= 100, plot=True)
+    eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=True)
 
 
