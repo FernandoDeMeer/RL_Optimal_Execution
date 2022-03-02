@@ -67,7 +67,8 @@ class TestBaseEnvLogic(unittest.TestCase):
                                   'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
-                                   'reset_feed': True}}
+                                   'reset_feed': True},
+                  "seed_config": {"seed" : 0,},}
 
     # define action space
     action_space = gym.spaces.Box(low=-1.0,
@@ -181,7 +182,8 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                   'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
-                                   'reset_feed': True}}
+                                   'reset_feed': True},
+                  "seed_config": {"seed" : 0,},}
 
 
     # define action space
@@ -282,7 +284,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                   'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
-                                   'reset_feed': True}}
+                                   'reset_feed': True},
+                  "seed_config": {"seed" : 0,},}
 
     # define action space
     action_space = gym.spaces.Box(low=-1.0,
@@ -383,7 +386,8 @@ class TestTwoSlices(unittest.TestCase):
                                   'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 1,
                                    'samples_per_feed': 20,
-                                   'reset_feed': True}}
+                                   'reset_feed': True},
+                  "seed_config": {"seed" : 0,},}
 
     # define action space
     action_space = gym.spaces.Box(low=-1.0,

@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import random
 from os.path import isdir, isfile, join
 import numpy.ma as ma
 from itertools import zip_longest
@@ -10,12 +11,9 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 
 from tqdm import tqdm
-from train_app import lob_env_creator, test_agent_one_episode, init_arg_parser, config, ROOT_DIR, DATA_DIR
+from train_app import lob_env_creator, init_arg_parser, config, ROOT_DIR, DATA_DIR
 from ray.rllib.agents.ppo import PPOTrainer
 
-from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAtStepEnv
 from src.core.agent.ray_model import CustomRNNModel
 
 
@@ -62,27 +60,28 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True,):
     if plot:
         import matplotlib.pyplot as plt
 
-        fig, axs = plt.subplots(2, 2, figsize=(12,8))
+        fig, axs = plt.subplots(2, 2, figsize=(14,10))
         axs[0, 0].hist(d_out['rewards'], density=True, bins=50)
         axs[0, 0].set_title('Rewards from RL Agent')
-        axs[0, 0].set(xlabel='Reward', ylabel='Probability')
+        axs[0, 0].set(xlabel='Reward', ylabel='Frequency')
 
-        axs[0, 1].hist(d_out['vwap_bmk'], alpha=0.5, density=True, bins=50)
-        axs[0, 1].hist(d_out['vwap_rl'], alpha=0.5, density=True, bins=50)
+        axs[0, 1].hist(d_out['vwap_bmk'], alpha=0.5, density=True, bins=50, label= 'Benchmark VWAP')
+        axs[0, 1].hist(d_out['vwap_rl'], alpha=0.5, density=True, bins=50, label = 'RL VWAP')
         axs[0, 1].set_title('Benchmark and RL Execution Price')
         axs[0, 1].set(xlabel='Execution Price', ylabel='Probability')
+        axs[0, 1].legend(loc = "upper left")
 
-        axs[1, 0].hist(d_out['vwap_diff'], density=True, bins=50)
+        axs[1, 0].hist(100*d_out['vwap_diff'], density=True, bins=50)
         axs[1, 0].set_title('Difference of Benchmark vs. RL Execution Price')
         axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Probability')
 
-        axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),d_out['vol_percentages'],
+        axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*d_out['vol_percentages'],
                       align='center',
                       alpha=0.5,
                       ecolor='black',
                       capsize=10)
         axs[1, 1].set_title('Average % of the volume executed per Order Placement in Bucket')
-        axs[1, 1].set(xlabel='Volume (%)', ylabel='Order Number')
+        axs[1, 1].set(xlabel= 'Order Number', ylabel= 'Volume (%)')
 
         plt.show()
 

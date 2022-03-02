@@ -10,6 +10,7 @@ import argparse
 import gym
 import json
 import numpy as np
+import random
 
 import ray
 from ray import tune
@@ -18,7 +19,7 @@ from ray.rllib.agents.ppo import PPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAtStepEnv
+from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAtStepEnv, RewardAtBucketEnv
 from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog
@@ -100,31 +101,36 @@ config = {
                                 "lstm_cells": 256},
     },
 
-    "env_config": {"obs_config": {
-        "lob_depth": 5,
-        "nr_of_lobs": 5,
-        "norm": True},
-        "train_config": {
-            "train": True,
-            "symbol": args.symbol,
-            "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-            "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
-        },
-        "trade_config": {"trade_direction": 1,
-                         "vol_low": 500,
-                         "vol_high": 500,
-                         "no_slices_low": 4,
-                         "no_slices_high": 4,
-                         "bucket_func": lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
-                         "rand_bucket_low": 0,
-                         "rand_bucket_high": 0},
-        "start_config": {"hour_low": 12,
-                         "hour_high": 12,
-                         "minute_low": 0,
-                         "minute_high": 0,
-                         "second_low": 0,
-                         "second_high": 0},
-        "exec_config": {"exec_times": [10]}},
+    "env_config": {'obs_config': {"lob_depth": 5,
+                                  "nr_of_lobs": 5,
+                                  "norm": True},
+                   "train_config": {
+                       "train": True,
+                       "symbol": 'btcusdt',
+                       "train_data_periods": [2021, 6, 21, 2021, 6, 21],
+                       "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+                   },
+                   'trade_config': {'trade_direction': 1,
+                                    'vol_low': 500,
+                                    'vol_high': 1000,
+                                    'no_slices_low': 5,
+                                    'no_slices_high': 10,
+                                    'bucket_func': lambda no_of_slices: (sorted([round(random.uniform(0, 1), 2) for _
+                                                                                 in range(no_of_slices)])),
+                                    'rand_bucket_low': 0,
+                                    'rand_bucket_high': 0},
+                   'start_config': {'hour_low': 1,
+                                    'hour_high': 19,
+                                    'minute_low': 0,
+                                    'minute_high': 59,
+                                    'second_low': 0,
+                                    'second_high': 59},
+                   'exec_config': {'exec_times': [5, 10, 15, 30, 60, 120, 240],
+                                   'delete_vol': False},
+                   'reset_config': {'reset_num_episodes': 1,
+                                    'samples_per_feed': 20,
+                                    'reset_feed': True},
+                   'seed_config': {'seed': 0,},},
 
     # Eval
     "evaluation_interval": 10,
@@ -263,16 +269,13 @@ def lob_env_creator(env_config):
 
     broker = Broker(lob_feed)
 
-    observation_space_config = {"obs_config": {"lob_depth": 5,
-                                               "nr_of_lobs": 5,
-                                               "norm": True}}
     action_space = gym.spaces.Box(low=0.0,
                                   high=1.0,
                                   shape=(1,),
                                   dtype=np.float32)
 
-    return DollarRewardAtStepEnv(broker=broker,
-                           config=observation_space_config,
+    return RewardAtBucketEnv(broker=broker,
+                           config=config["env_config"],
                            action_space=action_space)
 
 
@@ -340,7 +343,7 @@ if __name__ == "__main__":
                                                          metric="episode_reward_mean")
     checkpoint_path = checkpoints[0][0]
 
-    reward = test_agent_one_episode(config=config,
+    reward = test_agent_one_episode(config=config["env_config"],
                                     agent_path=checkpoint_path,
                                     eval_data_periods=[2021, 6, 21, 2021, 6, 21],
                                     symbol="btcusdt")

@@ -15,6 +15,12 @@ from src.ui.ui_comm import Charts as Charts
 DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                      "nr_of_lobs": 5,
                                      "norm": True},
+                      "train_config": {
+                          "train": True,
+                          "symbol": 'btcusdt',
+                          "train_data_periods": [2021, 6, 21, 2021, 6, 21],
+                          "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+                      },
                       'trade_config': {'trade_direction': 1,
                                        'vol_low': 500,
                                        'vol_high': 1000,
@@ -34,7 +40,8 @@ DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                       'delete_vol': False},
                       'reset_config': {'reset_num_episodes': 1,
                                        'samples_per_feed': 20,
-                                       'reset_feed': True}}
+                                       'reset_feed': True},
+                      'seed_config': {'seed': 0,},}
 
 
 def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=None):
@@ -78,7 +85,10 @@ class BaseEnv(gym.Env, ABC):
         # self.reset()
         self.build_observation_space()
         self.action_space = action_space
-        self.seed()
+        try:
+            self.seed(config['env_config']['seed_config']['seed'])
+        except:
+            self.seed(config['seed_config']['seed'])
 
     def reset(self):
         """ Reset the environment """
