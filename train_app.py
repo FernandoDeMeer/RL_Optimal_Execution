@@ -108,7 +108,7 @@ config = {
                        "train": True,
                        "symbol": 'btcusdt',
                        "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-                       "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+                       "eval_data_periods": [2021, 6, 22, 2021, 6, 30]
                    },
                    'trade_config': {'trade_direction': 1,
                                     'vol_low': 500,

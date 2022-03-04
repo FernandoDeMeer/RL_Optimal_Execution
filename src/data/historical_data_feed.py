@@ -146,6 +146,11 @@ class HistoricalDataFeed(DataFeed):
         self.data = np.fromfile("{}/{}".format(self.data_dir, self.binary_files[self.binary_file_idx]), dtype=np.float64)
         self.data = self.data.reshape(-1, 4 * self.lob_depth + 1)
 
+    def load_specific_day_data(self, binary_file_idx):
+
+        self.binary_file_idx = binary_file_idx
+        self._load_data()
+
     def _select_row_idx(self):
         """ method specifically selecting 'data_row_idx' and '_remaining_rows_in_file' """
 
@@ -158,6 +163,25 @@ class HistoricalDataFeed(DataFeed):
 
         self.data_row_idx = idx
         self._remaining_rows_in_file = self.data.shape[0] - idx
+
+    def get_daily_vols(self):
+        volatilities = []
+        for day in range(len(self.binary_files)):
+            mid_prices = []
+            for lob_idx in range(self.data.shape[0]):
+                lob = self.data[lob_idx][1:].reshape(-1, self.lob_depth)
+                # lob = raw_to_order_book(current_book=lob,
+                #                             time=datetime.utcfromtimestamp(lob[0] / 1000).strftime('%Y-%m-%d %H:%M:%S.%f'),
+                #                             depth=self.lob_depth)
+                mid_price = (lob[0,0] + lob[0,2]) / 2
+                mid_prices.append(mid_price)
+
+            day_vol = np.std(np.array(mid_prices))
+            volatilities.append(day_vol)
+            # Jump to the next day
+            self.next_data()
+        self.day_volatilities = volatilities
+        self.day_volatilities_ranking = np.argsort(volatilities)
 
     def __eq__(self, other):
         if self.__class__ == other.__class__:
