@@ -23,4 +23,4 @@ COPY requirements.txt .
 
 RUN pip install -r requirements.txt
 
-ENTRYPOINT ["python3", "train_app.py", "--num-cpus=38"]
+ENTRYPOINT ["python3", "train_app.py", "--num-cpus=39"]
