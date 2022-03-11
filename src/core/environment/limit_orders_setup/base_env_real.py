@@ -207,7 +207,9 @@ class BaseEnv(gym.Env, ABC):
 
     def _convert_action(self, action):
         """ Used if actions need to be transformed without having to change entire step() method """
-        return action[0]
+        action_rescaled = (action[0] - self.action_space.low[0]) / \
+                          (self.action_space.high[0] - self.action_space.low[0])
+        return action_rescaled
 
     def step(self, action):
 

@@ -269,7 +269,7 @@ def lob_env_creator(env_config):
 
     broker = Broker(lob_feed)
 
-    action_space = gym.spaces.Box(low=0.0,
+    action_space = gym.spaces.Box(low=-1.0,
                                   high=1.0,
                                   shape=(1,),
                                   dtype=np.float32)
