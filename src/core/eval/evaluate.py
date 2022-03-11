@@ -242,12 +242,13 @@ if __name__ == "__main__":
     agent = PPOTrainer(config=config)
     agent.restore(checkpoint)
 
+    # Evaluate on High and Low volatility days
     env = lob_env_creator(env_config= config["env_config"])
 
     highest_vol_days, lowest_vol_days = get_n_highest_and_lowest_vol_days(env,3)
     d_outs_list_high_vol = []
     d_outa_list_low_vol = []
-    
+
     for day in range(len(highest_vol_days)):
         day_idx = env.broker.data_feed.day_volatilities_ranking[day]
         day_file = env.broker.data_feed.binary_files[day_idx]
@@ -272,4 +273,9 @@ if __name__ == "__main__":
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outa_list_low_vol, days_class= 'Low_Vol')
 
-    # eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
+
+    # # Evaluate on the entire eval period
+    # config["env_config"]["reset_config"]["reset_feed"] = True # To make sure we jump between days of the eval_period
+    # env = lob_env_creator(env_config= config["env_config"])
+    # d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
+    # plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out, days_class= 'All')

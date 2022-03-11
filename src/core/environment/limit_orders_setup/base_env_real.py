@@ -64,8 +64,13 @@ def lob_to_numpy(lob, depth, norm_price=None, norm_vol_bid=None, norm_vol_ask=No
     else:
         volumes = np.concatenate((np.array(bid_volumes),
                                   np.array(ask_volumes)), axis=0)
-    return np.concatenate((prices, volumes), axis=0)
+    return prices, volumes
 
+def min_max_rescaling(array):
+    min = np.min(array)
+    max = np.max(array)
+    array = (array - min)/(max - min)
+    return array
 
 conv2date = lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%f')
 
@@ -355,27 +360,44 @@ class BaseEnv(gym.Env, ABC):
 
         obs = np.array([])
         if self.config['obs_config']['norm']:
-            # mid = (lob_hist[-1].get_best_ask() + lob_hist[-1].get_best_bid()) / 2
             mid = (past_lobs[-1].get_best_ask() + past_lobs[-1].get_best_bid()) / 2
             self.mid_pxs.append(float(mid))
             # for lob in lob_hist:
+            prices = []
+            volumes = []
             for lob in past_lobs:
-                # TODO: Right now both prices and volumes are normalized, however we show the agent the unnormalized volume, wouldn't it make more sense to not normalize the volume so that it can find the relationship between those quantities?
-                obs = np.concatenate((obs, lob_to_numpy(lob,
-                                                        depth=self.config['obs_config']['lob_depth'],
-                                                        norm_price=mid,
-                                                        norm_vol_bid=None,
-                                                        norm_vol_ask=None)), axis=0)
+                lob_prices, lob_volumes = lob_to_numpy(lob,
+                                   depth=self.config['obs_config']['lob_depth'],
+                                    norm_price=None,
+                                    norm_vol_bid=None,
+                                    norm_vol_ask=None)
+                prices.append(lob_prices)
+                volumes.append(lob_volumes)
+            prices = np.array(prices).reshape(-1)
+            prices = min_max_rescaling(prices)
+            volumes = np.array(volumes).reshape(-1)
+            volumes = min_max_rescaling(volumes)
+            obs = np.concatenate((prices, volumes))
+
             obs = np.concatenate((obs,
-                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.bucket_idx]]),
-                                  # vol left to trade in the bucket
+                                  np.array([self.broker.rl_algo.bucket_vol_remaining[self.bucket_idx]/self.broker.rl_algo.bucket_volumes[self.bucket_idx]]),
+                                  # % of vol left to trade in the bucket
                                   np.array([self.broker.rl_algo.no_of_slices - self.broker.rl_algo.order_idx - 1])),
                                  axis=0)  # orders left to place in the bucket
         else:
             # for lob in lob_hist:
+            prices = []
+            volumes = []
             for lob in past_lobs:
-                obs = np.concatenate(obs, (lob_to_numpy(lob,
+                lob_prices, lob_volumes  = np.concatenate(obs, (lob_to_numpy(lob,
                                                         depth=self.config['obs_config']['lob_depth'])), axis=0)
+                prices.append(lob_prices)
+                volumes.append(lob_volumes)
+
+            prices = np.array(prices).reshape(-1)
+            volumes = np.array(volumes).reshape(-1)
+            obs = np.concatenate((prices, volumes))
+
             obs = np.concatenate((obs,
                                   np.array([self.broker.rl_algo.bucket_vol_remaining[self.bucket_idx]]),
                                   # vol left to trade in the bucket
