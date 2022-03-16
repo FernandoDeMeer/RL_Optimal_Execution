@@ -94,7 +94,7 @@ config = {
     "lr": 5e-5,
     "lr_schedule": [
         [0, 5e-5],
-        [1e6, 1e-5],
+        [2e6, 5e-6],
     ],
     "entropy_coeff": 0.01,
     "lambda": 0.95,
