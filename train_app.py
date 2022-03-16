@@ -60,7 +60,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=50,
+        default=10000000,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -78,22 +78,29 @@ config = {
     "num_workers": args.num_cpus - 1,
     "num_envs_per_worker": 1,
     # Size of batches collected from each worker.
-    "rollout_fragment_length": 200,
+    "rollout_fragment_length": 5,
     # Number of timesteps collected for each SGD round. This defines the size
     # of each SGD epoch.
     # DEFAULT train_batch_size: 4000
-    "train_batch_size": 1024,
+    "train_batch_size": 240,
     # Total SGD batch size across all devices for SGD. This defines the
     # minibatch size within each epoch.
     "sgd_minibatch_size": 32,
     # Number of SGD iterations in each outer loop (i.e., number of epochs to
     # execute per train batch).
     "num_sgd_iter": 30,
+    # discount factor
+    "gamma": 1.0,
     "lr": 5e-5,
+    "lr_schedule": [
+        [0, 5e-5],
+        [1e6, 1e-5],
+    ],
     "entropy_coeff": 0.01,
     "lambda": 0.95,
-    "kl_coeff": 0.5,
-    "clip_param": 0.1,
+    "kl_coeff": 0.2,
+    "clip_param": 0.2,
+    "vf_loss_coeff": 1.0,
     "vf_share_layers": False,
     "model": {
         "custom_model": "end_to_end_model",
@@ -107,8 +114,8 @@ config = {
                    "train_config": {
                        "train": True,
                        "symbol": 'btcusdt',
-                       "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-                       "eval_data_periods": [2021, 6, 22, 2021, 6, 30]
+                       "train_data_periods": [2021, 6, 5, 2021, 6, 11],
+                       "eval_data_periods": [2021, 6, 12, 2021, 6, 14]
                    },
                    'trade_config': {'trade_direction': 1,
                                     'vol_low': 100,
