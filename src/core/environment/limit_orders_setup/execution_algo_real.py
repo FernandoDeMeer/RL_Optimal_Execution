@@ -196,8 +196,10 @@ class ExecutionAlgo:
             # place a limit order at best bid/ask -/+ 1 tick
             if side == 'bid':
                 p = lob.get_best_bid() - self.tick_size
+                # p = lob.get_best_bid() + 10 * self.tick_size # This allows for (partial) execution at the current LOB
             else:
                 p = lob.get_best_ask() + self.tick_size
+                # p = lob.get_best_ask() - 10 * self.tick_size # This allows for (partial) execution at the current LOB
             order = {'type': 'limit',
                      'timestamp': datetime.strftime(event['time'], '%Y-%m-%d %H:%M:%S.%f'),
                      'side': side,

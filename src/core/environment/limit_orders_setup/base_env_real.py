@@ -207,8 +207,7 @@ class BaseEnv(gym.Env, ABC):
 
     def _convert_action(self, action):
         """ Used if actions need to be transformed without having to change entire step() method """
-        action_rescaled = (action[0] - self.action_space.low[0]) / \
-                          (self.action_space.high[0] - self.action_space.low[0])
+        action_rescaled = action[0] * 0.1 # Actions can be between 0-20 and we re-scale to  0-2
         return action_rescaled
 
     def step(self, action):
@@ -294,7 +293,8 @@ class BaseEnv(gym.Env, ABC):
     def infer_volume_from_action(self, action):
         """ Logic for inferring the volume from the action placed in the env """
 
-        vol_to_trade = Decimal(str(action)) * self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        vol_to_trade = Decimal(str(action)) * \
+                       self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] # We trade {0,0.1,0.2,...2}*TWAP's volume
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
@@ -523,7 +523,7 @@ class RewardAtStepEnv(BaseEnv):
             vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.event_time_prev,
                                                                 end_date=self.event_time)
             if self.trade_dir == 1:
-                reward = vwap_bmk / vwap_rl - 1
+                reward = vwap_bmk / vwap_rl - 1 # This reward can lead to the agent executing low volumes, it doesn't take into account volume executed
             else:
                 reward = vwap_rl / vwap_bmk - 1
         except:
@@ -570,6 +570,7 @@ class RewardAtEpisodeEnv(BaseEnv):
 
 class NarrowTradeLimitEnv(RewardAtStepEnv):
     """ Example """
+    #TODO: Delete since it doesnt apply anymore to discrete actions
 
     def __init__(self, *args, **kwargs):
         super(NarrowTradeLimitEnv, self).__init__(*args, **kwargs)
@@ -597,7 +598,7 @@ class DollarRewardAtStepEnv(BaseEnv):
     def _convert_action(self, action):
         """ Used if actions need to be transformed without having to change entire step() method """
 
-        action = action[0]
+        action = action[0] * 0.1 # Actions can be between 0-20 and we re-scale to  0-2
         if math.isnan(action):
             action = 1/self.broker.benchmark_algo.no_of_slices
         return action

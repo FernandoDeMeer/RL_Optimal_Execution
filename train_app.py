@@ -275,10 +275,12 @@ def lob_env_creator(env_config):
 
     broker = Broker(lob_feed)
 
-    action_space = gym.spaces.Box(low=-1.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+    # action_space = gym.spaces.Box(low=-1.0,
+    #                               high=1.0,
+    #                               shape=(1,),
+    #                               dtype=np.float32)
+
+    action_space = gym.spaces.Discrete(n = 21)
 
     return RewardAtBucketEnv(broker=broker,
                            config=config["env_config"],
