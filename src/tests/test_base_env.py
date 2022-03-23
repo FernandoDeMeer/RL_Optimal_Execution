@@ -20,16 +20,12 @@ class DerivedEnv(ExampleEnvRewardAtStep):
         super(DerivedEnv, self).__init__(*args, **kwargs)
 
     def _convert_action(self, action):
-        action_min = 0.8
-        action_max = 1.2
-        action_rescaled = (action[0] - self.action_space.low[0]) / \
-                                (self.action_space.high[0] - self.action_space.low[0])
-        action_out = action_min + action_rescaled * (action_max - action_min)
+        action_out = action[0] * 0.1 # Actions can be between 0-20 and we re-scale to  0-2
         return action_out
 
     def infer_volume_from_action(self, action):
-        vol_to_trade = Decimal(str(action)) * \
-                            self.broker.benchmark_algo.volumes_per_trade[self.broker.benchmark_algo.order_idx][0]
+        vol_to_trade = Decimal(str(action)) *\
+                       (self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx]) # We trade {0,0.1,0.2,...2}*TWAP's volume
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
@@ -71,10 +67,8 @@ class TestBaseEnvLogic(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Box(low=-1.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+    action_space = gym.spaces.Discrete(n = 21)
+
     # define the env
     base_env = DerivedEnv(broker=broker,
                           config=env_config,
@@ -84,7 +78,7 @@ class TestBaseEnvLogic(unittest.TestCase):
         self.base_env.reset()
         done = False
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([0]))
+            s, r, done, i = self.base_env.step(action=np.array([10]))
 
         traded_volumes_per_time = [float(ts['quantity']) for ts in self.base_env.broker.trade_logs['rl_algo']
                                    if ts['message'] == 'trade']
@@ -187,10 +181,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
 
 
     # define action space
-    action_space = gym.spaces.Box(low=-1.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+    action_space = gym.spaces.Discrete(n = 21)
 
     def test_reward_at_bucket(self):
         env = RewardAtBucketEnv(broker=self.broker,
@@ -200,7 +191,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([0]))
+            s, r, done, i = env.step(action=np.array([10]))
             reward_vec.append(r)
         # check that all trades are actually the same...
         self.assertEqual(self.broker.trade_logs["benchmark_algo"],
@@ -219,7 +210,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
             done = False
             reward_vec = []
             while not done:
-                _, r, done, _ = env.step(action=np.array([0]))
+                _, r, done, _ = env.step(action=np.array([10]))
                 reward_vec.append(r)
             self.assertEqual(self.broker.trade_logs["benchmark_algo"],
                              self.broker.trade_logs["rl_algo"],
@@ -234,7 +225,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([0]))
+            s, r, done, i = env.step(action=np.array([10]))
             reward_vec.append(r)
         self.assertNotEqual(self.broker.trade_logs["benchmark_algo"],
                             logs_prev,
@@ -249,7 +240,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([0]))
+            s, r, done, i = env.step(action=np.array([10]))
             reward_vec.append(r)
         self.assertEqual(reward_vec, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 'Reward Vector is off')
 
@@ -288,10 +279,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Box(low=-1.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+    action_space = gym.spaces.Discrete(n = 21)
+
     # define the env
     base_env = DerivedEnv(broker=broker,
                           config=env_config,
@@ -332,7 +321,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([0]))
+            s, r, done, i = self.base_env.step(action=np.array([10]))
             reward_vec.append(r)
 
         bmk_log_times = [log["timestamp"] for log in self.broker.trade_logs['benchmark_algo']]
@@ -390,10 +379,8 @@ class TestTwoSlices(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Box(low=-1.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+    action_space = gym.spaces.Discrete(n = 21)
+
     # define the env
     base_env = DerivedEnv(broker=broker,
                           config=env_config,
@@ -404,7 +391,7 @@ class TestTwoSlices(unittest.TestCase):
         done = False
         idx = 0
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([0]))
+            s, r, done, i = self.base_env.step(action=np.array([10]))
 
         vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
         self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS are not matching')

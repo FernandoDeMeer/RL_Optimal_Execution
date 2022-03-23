@@ -330,9 +330,13 @@ class Broker(ABC):
             if order_temp_bmk['type'] == 'limit':
                 # update the price also
                 if order_temp_bmk['side'] == 'bid' and order_temp_bmk['price'] < lob_bmk.get_best_bid():
-                    order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
+                    # order_temp_bmk['price'] = lob_bmk.get_best_bid() - self.benchmark_algo.tick_size
+                    order_temp_bmk['price'] = lob_bmk.get_best_bid() + 10 * self.benchmark_algo.tick_size # Allows for execution up to an adverse price movement of 10 ticks in the next LOB
+
                 if order_temp_bmk['side'] == 'ask' and order_temp_bmk['price'] > lob_bmk.get_best_ask():
-                    order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size
+                    # order_temp_bmk['price'] = lob_bmk.get_best_ask() + self.benchmark_algo.tick_size
+                    order_temp_bmk['price'] = lob_bmk.get_best_ask() - 10 * self.benchmark_algo.tick_size # Allows for execution up to an adverse price movement of 10 ticks in the next LOB
+
             self.remaining_order['benchmark_algo'] = []
 
         if len(self.remaining_order['rl_algo']) != 0:
@@ -344,9 +348,13 @@ class Broker(ABC):
             if order_temp_rl['type'] == 'limit':
                 # update the price also
                 if order_temp_rl['side'] == 'bid' and order_temp_rl['price'] < lob_rl.get_best_bid():
-                    order_temp_rl['price'] = lob_rl.get_best_bid() - self.benchmark_algo.tick_size
+                    # order_temp_rl['price'] = lob_rl.get_best_bid() - self.benchmark_algo.tick_size
+                    order_temp_rl['price'] = lob_rl.get_best_bid() + 10 * self.benchmark_algo.tick_size # Allows for execution up to an adverse price movement of 10 ticks in the next LOB
+
                 if order_temp_rl['side'] == 'ask' and order_temp_rl['price'] > lob_rl.get_best_ask():
-                    order_temp_rl['price'] = lob_rl.get_best_ask() + self.benchmark_algo.tick_size
+                    # order_temp_rl['price'] = lob_rl.get_best_ask() + self.benchmark_algo.tick_size
+                    order_temp_rl['price'] = lob_rl.get_best_ask() - 10 * self.benchmark_algo.tick_size # Allows for execution up to an adverse price movement of 10 ticks in the next LOB
+
             self.remaining_order['rl_algo'] = []
         return order_temp_bmk, order_temp_rl
 
