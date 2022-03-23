@@ -2,9 +2,12 @@ import os
 import time
 import datetime
 import argparse
+import math
 
 import gym
 import json
+from decimal import Decimal
+import numpy as np
 
 import ray
 from ray import tune
@@ -14,7 +17,50 @@ from ray.tune.logger import pretty_print
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
+from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+
+
+class NarrowTradeLimitEnvDQN(BaseEnv):
+
+    def __init__(self, *args, **kwargs):
+        super(NarrowTradeLimitEnvDQN, self).__init__(*args, **kwargs)
+
+    def _convert_action(self, action):
+        shift = 0.2
+        if action == 0:
+            action_out = 1 - shift
+        elif action == 1:
+            action_out = 1
+        elif action == 2:
+            action_out = 1 + shift
+        else:
+            raise ValueError
+        return action_out
+
+    def infer_volume_from_action(self, action):
+        vol_to_trade = Decimal(str(action)) * \
+                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
+        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
+        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
+        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
+            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        return vol_to_trade
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket as $ improvement of VWAP """
+
+        reward = 0
+        try:
+            if self.bucket_time != self.bucket_time_prev:
+                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                    end_date=self.bucket_time)
+                if self.trade_dir == 1:
+                    reward = np.sign(vwap_bmk - vwap_rl)
+                else:
+                    reward = np.sign(vwap_rl - vwap_bmk)
+        except:
+            reward = 0
+        return reward
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,11 +119,6 @@ def init_arg_parser():
     return parser.parse_args()
 
 
-class TradingEnvDQN(RewardAtStepEnv):
-    def _convert_action(self, action):
-        return action / self.action_space.n
-
-
 def lob_env_creator(env_config):
 
     if env_config['train_config']['train']:
@@ -96,9 +137,9 @@ def lob_env_creator(env_config):
     exclude_keys = {'train_config'}
     env_config_clean = {k: env_config[k] for k in set(list(env_config.keys())) - set(exclude_keys)}
 
-    return TradingEnvDQN(broker=Broker(lob_feed),
-                         action_space=gym.spaces.Discrete(11),
-                         config=env_config_clean)
+    return NarrowTradeLimitEnvDQN(broker=Broker(lob_feed),
+                                  action_space=gym.spaces.Discrete(3),
+                                  config=env_config_clean)
 
 
 def init_session_container(session_id):
@@ -157,32 +198,36 @@ if __name__ == "__main__":
     }
 
     # Add config for our custom environment
-    env_config = {'env_config': {'obs_config': {
-                                     "lob_depth": 5,
-                                     "nr_of_lobs": 5,
-                                     "norm": True},
-                                 'train_config': {
-                                     "train": True,
-                                     "symbol": args.symbol,
-                                     "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-                                     "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
-                                 },
-                                 'trade_config': {'trade_direction': 1,
-                                                  'vol_low': 500,
-                                                  'vol_high': 500,
-                                                  'no_slices_low': 4,
-                                                  'no_slices_high': 4,
-                                                  'bucket_func': lambda no_of_slices: [0.2, 0.4, 0.6, 0.8],
-                                                  'rand_bucket_low': 0,
-                                                  'rand_bucket_high': 0},
-                                 'start_config': {'hour_low': 12,
-                                                  'hour_high': 12,
-                                                  'minute_low': 0,
-                                                  'minute_high': 0,
-                                                  'second_low': 0,
-                                                  'second_high': 0},
-                                 'exec_config': {'exec_times': [10]}}
-                }
+    env_config = {'obs_config': {"lob_depth": 5,
+                                  "nr_of_lobs": 5,
+                                  "norm": True},
+                   "train_config": {
+                       "train": True,
+                       "symbol": 'btcusdt',
+                       "train_data_periods": [2021, 6, 21, 2021, 6, 21],
+                       "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+                   },
+                   'trade_config': {'trade_direction': 1,
+                                    'vol_low': 100,
+                                    'vol_high': 100,
+                                    'no_slices_low': 10,
+                                    'no_slices_high': 10,
+                                    'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0, 1, no_of_slices+2)[1:-1], 2)),
+                                    'rand_bucket_low': 0,
+                                    'rand_bucket_high': 0},
+                   'start_config': {'hour_low': 12,
+                                    'hour_high': 12,
+                                    'minute_low': 0,
+                                    'minute_high': 0,
+                                    'second_low': 0,
+                                    'second_high': 0},
+                   'exec_config': {'exec_times': [5],
+                                   'delete_vol': False},
+                   'reset_config': {'reset_num_episodes': 5000,
+                                    'samples_per_feed': 2000,
+                                    'reset_feed': True},
+                   'seed_config': {'seed': 0,}}
+    env_config = {"env_config": env_config}
     config.update(env_config)
 
     # config for stopping the training
@@ -192,13 +237,14 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
-    """
     session_container_path = init_session_container(args.session_id)
+    """
     with open(os.path.join(session_container_path, "config.json"), "a", encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
     """
 
-    if args.no_tune:
+    no_tune = False
+    if no_tune:
 
         dqn_config = dqn.DEFAULT_CONFIG.copy()
         dqn_config.update(config)
@@ -216,7 +262,7 @@ if __name__ == "__main__":
     else:
         # automated run with Tune and grid search and TensorBoard
         print("Training automatically with Ray Tune")
-        results = tune.run(dqn.DQNTrainer,
+        results = tune.run("DQN",
                            config=config,
                            metric="episode_reward_mean",
                            mode="max",
@@ -226,6 +272,7 @@ if __name__ == "__main__":
                            local_dir=session_container_path,
                            )
 
+        """
         print("Test agent on one episode")
         checkpoints = results.get_trial_checkpoints_paths(trial=results.get_best_trial('episode_reward_mean'),
                                                           metric='episode_reward_mean')
@@ -233,5 +280,6 @@ if __name__ == "__main__":
         reward = test_agent_one_episode(config=config,
                                         agent_path=checkpoint_path)
         print(reward)
+        """
 
     ray.shutdown()
