@@ -568,7 +568,7 @@ class RewardAtEpisodeEnv(BaseEnv):
         return reward
 
 
-class NarrowTradeLimitEnv(RewardAtStepEnv):
+class NarrowTradeLimitEnv(BaseEnv):
     """ Example """
 
     def __init__(self, *args, **kwargs):
@@ -584,12 +584,87 @@ class NarrowTradeLimitEnv(RewardAtStepEnv):
 
     def infer_volume_from_action(self, action):
         vol_to_trade = Decimal(str(action)) * \
-                       self.broker.benchmark_algo.volumes_per_trade[self.broker.benchmark_algo.order_idx][0]
+                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
             vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
         return vol_to_trade
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket as $ improvement of VWAP """
+
+        reward = 0
+        try:
+            if self.bucket_time != self.bucket_time_prev:
+                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                    end_date=self.bucket_time)
+                if self.trade_dir == 1:
+                    reward = vwap_bmk - vwap_rl
+                else:
+                    reward = vwap_rl - vwap_bmk
+        except:
+            reward = 0
+        return reward
+
+
+class NarrowTradeLimitEnvV2(BaseEnv):
+    """ Example """
+
+    def __init__(self, *args, **kwargs):
+        super(NarrowTradeLimitEnvV2, self).__init__(*args, **kwargs)
+
+    def _convert_action(self, action):
+        action_min = 0.8
+        action_max = 1.2
+        action_rescaled = (action[0] - self.action_space.low[0]) / \
+                          (self.action_space.high[0] - self.action_space.low[0])
+        action_out = action_min + action_rescaled * (action_max - action_min)
+        return action_out
+
+    def infer_volume_from_action(self, action):
+        vol_to_trade = Decimal(str(action)) * \
+                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
+        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
+        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
+        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
+            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
+        return vol_to_trade
+
+    def reward_func(self):
+        """ Env with reward at end of each bucket as $ improvement of VWAP """
+
+        reward = 0
+        try:
+            if self.bucket_time != self.bucket_time_prev:
+                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
+                                                                    end_date=self.bucket_time)
+                if self.trade_dir == 1:
+                    reward = np.sign(vwap_bmk - vwap_rl)
+                else:
+                    reward = np.sign(vwap_rl - vwap_bmk)
+        except:
+            reward = 0
+        return reward
+
+
+class NarrowTradeLimitEnvDQN(NarrowTradeLimitEnv):
+    """ Example """
+
+    def __init__(self, *args, **kwargs):
+        super(NarrowTradeLimitEnvDQN, self).__init__(*args, **kwargs)
+
+    def _convert_action(self, action):
+        shift = 0.2
+        if action == 0:
+            action_out = 1 - shift
+        elif action == 1:
+            action_out = 1
+        elif action == 2:
+            action_out = 1 + shift
+        else:
+            raise ValueError
+        return action_out
 
 
 class DollarRewardAtStepEnv(BaseEnv):
