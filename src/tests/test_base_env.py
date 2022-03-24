@@ -20,11 +20,11 @@ class DerivedEnv(ExampleEnvRewardAtStep):
         super(DerivedEnv, self).__init__(*args, **kwargs)
 
     def _convert_action(self, action):
-        action_out = action[0] * 0.1 # Actions can be between 0-20 and we re-scale to  0-2
+        action_out = action[0] # Actions can be between 0-20 and we re-scale to  0-2
         return action_out
 
     def infer_volume_from_action(self, action):
-        vol_to_trade = Decimal(str(action)) *\
+        vol_to_trade = Decimal(str(0.8 + 0.2*action)) *\
                        (self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx]) # We trade {0,0.1,0.2,...2}*TWAP's volume
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
@@ -67,7 +67,7 @@ class TestBaseEnvLogic(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Discrete(n = 21)
+    action_space = gym.spaces.Discrete(n = 3)
 
     # define the env
     base_env = DerivedEnv(broker=broker,
@@ -78,7 +78,7 @@ class TestBaseEnvLogic(unittest.TestCase):
         self.base_env.reset()
         done = False
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([10]))
+            s, r, done, i = self.base_env.step(action=np.array([1]))
 
         traded_volumes_per_time = [float(ts['quantity']) for ts in self.base_env.broker.trade_logs['rl_algo']
                                    if ts['message'] == 'trade']
@@ -181,7 +181,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
 
 
     # define action space
-    action_space = gym.spaces.Discrete(n = 21)
+    action_space = gym.spaces.Discrete(n = 3)
 
     def test_reward_at_bucket(self):
         env = RewardAtBucketEnv(broker=self.broker,
@@ -191,7 +191,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([10]))
+            s, r, done, i = env.step(action=np.array([1]))
             reward_vec.append(r)
         # check that all trades are actually the same...
         self.assertEqual(self.broker.trade_logs["benchmark_algo"],
@@ -210,7 +210,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
             done = False
             reward_vec = []
             while not done:
-                _, r, done, _ = env.step(action=np.array([10]))
+                _, r, done, _ = env.step(action=np.array([1]))
                 reward_vec.append(r)
             self.assertEqual(self.broker.trade_logs["benchmark_algo"],
                              self.broker.trade_logs["rl_algo"],
@@ -225,7 +225,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([10]))
+            s, r, done, i = env.step(action=np.array([1]))
             reward_vec.append(r)
         self.assertNotEqual(self.broker.trade_logs["benchmark_algo"],
                             logs_prev,
@@ -240,7 +240,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = env.step(action=np.array([10]))
+            s, r, done, i = env.step(action=np.array([1]))
             reward_vec.append(r)
         self.assertEqual(reward_vec, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 'Reward Vector is off')
 
@@ -279,7 +279,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Discrete(n = 21)
+    action_space = gym.spaces.Discrete(n = 3)
 
     # define the env
     base_env = DerivedEnv(broker=broker,
@@ -321,7 +321,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
         done = False
         reward_vec = []
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([10]))
+            s, r, done, i = self.base_env.step(action=np.array([1]))
             reward_vec.append(r)
 
         bmk_log_times = [log["timestamp"] for log in self.broker.trade_logs['benchmark_algo']]
@@ -379,7 +379,7 @@ class TestTwoSlices(unittest.TestCase):
                   "seed_config": {"seed" : 0,},}
 
     # define action space
-    action_space = gym.spaces.Discrete(n = 21)
+    action_space = gym.spaces.Discrete(n = 3)
 
     # define the env
     base_env = DerivedEnv(broker=broker,
@@ -391,7 +391,7 @@ class TestTwoSlices(unittest.TestCase):
         done = False
         idx = 0
         while not done:
-            s, r, done, i = self.base_env.step(action=np.array([10]))
+            s, r, done, i = self.base_env.step(action=np.array([1]))
 
         vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
         self.assertEqual(vwap_bmk, vwap_rl, 'VWAPS are not matching')

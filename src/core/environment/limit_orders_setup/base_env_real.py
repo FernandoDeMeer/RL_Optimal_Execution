@@ -293,7 +293,7 @@ class BaseEnv(gym.Env, ABC):
     def infer_volume_from_action(self, action):
         """ Logic for inferring the volume from the action placed in the env """
 
-        vol_to_trade = Decimal(str(action)) * \
+        vol_to_trade = Decimal(str(0.8 + 0.2*action)) * \
                        self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] # We trade {0,0.1,0.2,...2}*TWAP's volume
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
