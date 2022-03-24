@@ -35,6 +35,7 @@ class NarrowTradeLimitEnvDQN(BaseEnv):
             action_out = 1 + shift
         else:
             raise ValueError
+        action_out = 1
         return action_out
 
     def infer_volume_from_action(self, action):
@@ -95,7 +96,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=100,
+        default=10000000,
         help="Number of episodes to train.")
 
     parser.add_argument(
@@ -184,7 +185,8 @@ if __name__ == "__main__":
     # Config necessary for RLlib training
     config = {
         "env": args.env,  # or "corridor" if registered above
-        "num_workers": args.num_cpus,
+        "num_workers": args.num_cpus - 1,
+        "num_gpus": 0,
         "num_envs_per_worker": 1,
         "framework": args.framework,
         "evaluation_interval": 10,
@@ -194,6 +196,20 @@ if __name__ == "__main__":
         "evaluation_config": {
             "explore": False,
             "render_env": True,
+        },
+        "exploration_config": {
+            # The Exploration class to use.
+            "type": "EpsilonGreedy",
+            # Config for the Exploration class' constructor:
+            "initial_epsilon": 1.0,
+            "final_epsilon": 0.02,
+            "epsilon_timesteps": 10000000,  # Timesteps over which to anneal epsilon.
+
+            # For soft_q, use:
+            # "exploration_config" = {
+            #   "type": "SoftQ"
+            #   "temperature": [float, e.g. 1.0]
+            # }
         }
     }
 
@@ -208,11 +224,11 @@ if __name__ == "__main__":
                        "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
                    },
                    'trade_config': {'trade_direction': 1,
-                                    'vol_low': 100,
-                                    'vol_high': 100,
-                                    'no_slices_low': 10,
-                                    'no_slices_high': 10,
-                                    'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0, 1, no_of_slices+2)[1:-1], 2)),
+                                    'vol_low': 10,
+                                    'vol_high': 10,
+                                    'no_slices_low': 1,
+                                    'no_slices_high': 1,
+                                    'bucket_func': lambda no_of_slices: [0.5],
                                     'rand_bucket_low': 0,
                                     'rand_bucket_high': 0},
                    'start_config': {'hour_low': 12,
@@ -248,7 +264,6 @@ if __name__ == "__main__":
 
         dqn_config = dqn.DEFAULT_CONFIG.copy()
         dqn_config.update(config)
-        dqn_config["lr"] = 1e-3
         trainer = dqn.DQNTrainer(config=dqn_config)
 
         # run manual training loop and print results after each iteration
@@ -267,7 +282,7 @@ if __name__ == "__main__":
                            metric="episode_reward_mean",
                            mode="max",
                            checkpoint_freq=10,
-                           stop=stop,
+                           stop={"training_iteration": args.nr_episodes},
                            checkpoint_at_end=True,
                            local_dir=session_container_path,
                            )
