@@ -28,6 +28,10 @@ from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
 
+from src.core.agent.ray_model import CustomRNNModel
+
+from ray.rllib.models import ModelCatalog
+
 
 class NarrowTradeLimitEnvDQN(BaseEnv):
 
@@ -209,6 +213,8 @@ if __name__ == "__main__":
     ray.init(local_mode=False, num_cpus=args.num_cpus + 1)
     register_env(args.env, lob_env_creator)
 
+    ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
+
     # APPO based IMPALA CONFIG
     APPO_CONFIG = impala.ImpalaTrainer.merge_trainer_configs(
         impala.DEFAULT_CONFIG,  # See keys in impala.py, which are also supported.
@@ -266,6 +272,12 @@ if __name__ == "__main__":
             "vf_loss_coeff": 0.5,
             "entropy_coeff": 0.01,
             "entropy_coeff_schedule": None,
+
+            "model": {
+                "custom_model": "end_to_end_model",
+                "custom_model_config": {"fcn_depth": 128,
+                                        "lstm_cells": 256},
+            },
 
             ####
             # "evaluation_interval": 10,
@@ -348,6 +360,7 @@ if __name__ == "__main__":
                            stop={"training_iteration": args.nr_episodes},
                            checkpoint_at_end=True,
                            local_dir=session_container_path,
+                           max_failures=-1
                            )
 
     ray.shutdown()
