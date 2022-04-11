@@ -3,6 +3,8 @@
 #   Async PPO
 #
 
+import shutil
+import copy
 
 import os
 import time
@@ -28,9 +30,8 @@ from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
 
-from src.core.agent.ray_model import CustomRNNModel
-
 from ray.rllib.models import ModelCatalog
+from src.core.agent.ray_model import CustomRNNModel
 
 
 class NarrowTradeLimitEnvDQN(BaseEnv):
@@ -105,6 +106,7 @@ def init_arg_parser():
 
     parser.add_argument("--env", type=str, default="lob_env")
     parser.add_argument("--num-cpus", type=int, default=1)
+    parser.add_argument("--agent-restore-path", type=str, default=None)
 
     parser.add_argument(
         "--framework",
@@ -210,19 +212,18 @@ if __name__ == "__main__":
     args = init_arg_parser()
 
     # For debugging the env or other modules, set local_mode=True
-    ray.init(local_mode=False, num_cpus=args.num_cpus + 1)
+    ray.init(
+        local_mode=False,
+        # local_mode=True,
+        num_cpus=args.num_cpus + 1)
     register_env(args.env, lob_env_creator)
 
-    ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
+    # ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
     # APPO based IMPALA CONFIG
     APPO_CONFIG = impala.ImpalaTrainer.merge_trainer_configs(
         impala.DEFAULT_CONFIG,  # See keys in impala.py, which are also supported.
         {
-            ####
-            "framework": args.framework,
-            "env": args.env,
-
             # Whether to use V-trace weighted advantages. If false, PPO GAE
             # advantages will be used instead.
             "vtrace": True,
@@ -249,8 +250,6 @@ if __name__ == "__main__":
             "rollout_fragment_length": 50,
             "train_batch_size": 500,
             # "min_time_s_per_reporting": 10,
-            ####
-            "num_workers": args.num_cpus,
             "num_gpus": 0,
             "num_envs_per_worker": 1,
             "num_multi_gpu_tower_stacks": 1,
@@ -273,26 +272,20 @@ if __name__ == "__main__":
             "entropy_coeff": 0.01,
             "entropy_coeff_schedule": None,
 
-            "model": {
-                "custom_model": "end_to_end_model",
-                "custom_model_config": {"fcn_depth": 128,
-                                        "lstm_cells": 256},
-            },
+            # From params...
+            "num_workers": args.num_cpus,
+            "framework": args.framework,
+            "env": args.env,
 
-            ####
-            # "evaluation_interval": 10,
-            # "train_batch_size": 200,
-            # # Number of episodes to run per evaluation period.
-            # "evaluation_num_episodes": 1,
-            # "evaluation_config": {
-            #     "explore": False,
-            #     "render_env": True,
+            # "model": {
+            #     "custom_model": "end_to_end_model",
+            #     "custom_model_config": {"fcn_depth": 128,
+            #                             "lstm_cells": 256},
             # },
         },
         _allow_unknown_configs=True,
     )
 
-    # Add config for our custom environment
     env_config = {'obs_config': {"lob_depth": 5,
                                  "nr_of_lobs": 5,
                                  "norm": True},
@@ -311,47 +304,48 @@ if __name__ == "__main__":
                                    'rand_bucket_low': 0,
                                    'rand_bucket_high': 0},
                   'start_config': {'hour_low': 1,
-                                   'hour_high': 23,
+                                   'hour_high': 22,
                                    'minute_low': 0,
-                                   'minute_high': 0,
+                                   'minute_high': 55,
                                    'second_low': 0,
-                                   'second_high': 0},
+                                   'second_high': 55},
                   'exec_config': {'exec_times': [5],
                                   'delete_vol': False},
                   'reset_config': {'reset_num_episodes': 30,
                                    'samples_per_feed': 2000,
                                    'reset_feed': True},
-                  'seed_config': {'seed': 0,}}
+                  'seed_config': {'seed': 0}}
     env_config = {"env_config": env_config}
     APPO_CONFIG.update(env_config)
 
-    # config for stopping the training
+    session_container_path = init_session_container(args.session_id)
+
+    with open("{}/params.txt".format(session_container_path), "w") as env_params_file:
+        env_config_copy = copy.deepcopy(env_config)["env_config"]
+        f__ = env_config_copy["trade_config"]["bucket_func"]
+        env_config_copy["trade_config"]["bucket_func"] = f__(0)
+
+        env_config_copy["nn_model"] = APPO_CONFIG["model"]
+
+        env_params_file.write(json.dumps(env_config_copy,
+                                         indent=4,
+                                         separators=(',', ': ')))
+
+    shutil.make_archive(base_dir="src",
+                        root_dir=os.getcwd(),
+                        format='zip',
+                        base_name=os.path.join(session_container_path, "src"))
+    print("")
+
     stop = {
         "training_iteration": args.nr_episodes,
         "timesteps_total": args.stop_timesteps,
         "episode_reward_mean": args.stop_reward,
     }
 
-    session_container_path = init_session_container(args.session_id)
+    is_train = True
+    if is_train:
 
-    no_tune = False
-    if no_tune:
-
-        # dqn_config = dqn.DEFAULT_CONFIG.copy()
-        # dqn_config.update(DEFAULT_CONFIG)
-        trainer = APPOTrainer(config=APPO_CONFIG)
-
-        # run manual training loop and print results after each iteration
-        for _ in range(args.nr_episodes):
-            result = trainer.train()
-            print(pretty_print(result))
-            # stop training of the target train steps or reward are reached
-            if result["timesteps_total"] >= args.stop_timesteps or \
-                    result["episode_reward_mean"] >= args.stop_reward:
-                break
-    else:
-        # automated run with Tune and grid search and TensorBoard
-        print("Training automatically with Ray Tune")
         results = tune.run("APPO",
                            config=APPO_CONFIG,
                            metric="episode_reward_mean",
@@ -360,7 +354,19 @@ if __name__ == "__main__":
                            stop={"training_iteration": args.nr_episodes},
                            checkpoint_at_end=True,
                            local_dir=session_container_path,
-                           max_failures=-1
-                           )
+                           restore=None if args.agent_restore_path is None else os.path.join(session_container_path,
+                                                                                             "APPO",
+                                                                                             args.agent_restore_path,),
+                           max_failures=-1)
+    else:
+        trainer = APPOTrainer(config=APPO_CONFIG)
+
+        for _ in range(args.nr_episodes):
+            result = trainer.train()
+            print(pretty_print(result))
+
+            if result["timesteps_total"] >= args.stop_timesteps or \
+                    result["episode_reward_mean"] >= args.stop_reward:
+                break
 
     ray.shutdown()
