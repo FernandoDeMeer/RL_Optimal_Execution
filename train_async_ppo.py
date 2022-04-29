@@ -116,7 +116,7 @@ def init_arg_parser():
 
     parser.add_argument(
         "--symbol",
-        choices=["btc_usdt"],
+        choices=["btcusdt"],
         default="btcusdt",
         help="Market symbol.")
 
@@ -311,9 +311,7 @@ if __name__ == "__main__":
                                    'second_high': 55},
                   'exec_config': {'exec_times': [5],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 30,
-                                   'samples_per_feed': 2000,
-                                   'reset_feed': True},
+                  'reset_config': {'reset_num_episodes': 30,},
                   'seed_config': {'seed': 0}}
     env_config = {"env_config": env_config}
     APPO_CONFIG.update(env_config)

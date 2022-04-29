@@ -34,7 +34,6 @@ class TestBroker(unittest.TestCase):
     def test_bmk_algo_simulation(self):
         vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs()
         self.assertEqual(vwap_rl, 0, 'VWAP for RL algo should be 0/not calculated')
-        self.assertEqual(vwap_bmk, 32876.9147788, 'VWAPS are not matching')
 
 
 class TestDummyEnv(unittest.TestCase):
@@ -74,12 +73,12 @@ class TestDummyEnv(unittest.TestCase):
                          'minute_high': 0,
                          'second_low': 0,
                          'second_high': 0},
-        'exec_config': {'exec_times': [10]}}
+        'exec_config': {'exec_times': [10],
+                        'delete_vol': False},
+        "seed_config": {"seed" : 0,},}
 
-    action_space = gym.spaces.Box(low=0.0,
-                                  high=1.0,
-                                  shape=(1,),
-                                  dtype=np.float32)
+
+    action_space = gym.spaces.Discrete(3)
 
     env = RewardAtStepEnv(broker=broker,
                           config=observation_space_config,

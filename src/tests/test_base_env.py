@@ -2,6 +2,7 @@ import unittest
 import math
 import os
 import gym
+import datetime
 
 from decimal import Decimal
 import numpy as np
@@ -34,9 +35,10 @@ class DerivedEnv(ExampleEnvRewardAtStep):
 
 
 class TestBaseEnvLogic(unittest.TestCase):
-
+    start_day = datetime.datetime(year=2021,month=6, day=1)
+    end_day = datetime.datetime(year=2021,month=6, day=1)
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt')
+                                  instrument='btcusdt', start_day=start_day, end_day=end_day)
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -61,9 +63,7 @@ class TestBaseEnvLogic(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 1,
-                                   'samples_per_feed': 20,
-                                   'reset_feed': True},
+                  'reset_config': {'reset_num_episodes': 1,},
                   "seed_config": {"seed" : 0,},}
 
     # define action space
@@ -147,9 +147,11 @@ class RewardAtEpisodeEnv(DerivedEnv):
 
 
 class TestRewardCalcsInEnv(unittest.TestCase):
+    start_day = datetime.datetime(year=2021,month=6, day=1)
+    end_day = datetime.datetime(year=2021,month=6, day=1)
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt')
+                                  instrument='btcusdt', start_day=start_day, end_day=end_day)
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -174,9 +176,7 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 1,
-                                   'samples_per_feed': 20,
-                                   'reset_feed': True},
+                  'reset_config': {'reset_num_episodes': 1,},
                   "seed_config": {"seed" : 0,},}
 
 
@@ -221,13 +221,21 @@ class TestRewardCalcsInEnv(unittest.TestCase):
                                  'Trading history is not the same as previously')
             logs_prev = self.broker.trade_logs["benchmark_algo"]
 
+        start_day = datetime.datetime(year=2021,month=6, day=2)
+        end_day = datetime.datetime(year=2021,month=6, day=2)
+        lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
+                                      instrument='btcusdt', start_day=start_day, end_day=end_day)
+        broker = Broker(lob_feed)
+        env = RewardAtEpisodeEnv(broker=broker,
+                                 config=self.env_config,
+                                 action_space=self.action_space)
         env.reset()
         done = False
         reward_vec = []
         while not done:
             s, r, done, i = env.step(action=np.array([1]))
             reward_vec.append(r)
-        self.assertNotEqual(self.broker.trade_logs["benchmark_algo"],
+        self.assertNotEqual(env.broker.trade_logs["benchmark_algo"],
                             logs_prev,
                             'Trading should be different now since sampled from a different date')
         self.assertEqual(reward_vec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], 'Reward Vector is off')
@@ -246,9 +254,11 @@ class TestRewardCalcsInEnv(unittest.TestCase):
 
 
 class TestSimilarityEnvVsSim(unittest.TestCase):
+    start_day = datetime.datetime(year=2021,month=6, day=1)
+    end_day = datetime.datetime(year=2021,month=6, day=1)
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt')
+                                  instrument='btcusdt', start_day=start_day, end_day=end_day)
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -273,9 +283,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 1,
-                                   'samples_per_feed': 20,
-                                   'reset_feed': True},
+                  'reset_config': {'reset_num_episodes': 1,},
                   "seed_config": {"seed" : 0,},}
 
     # define action space
@@ -288,8 +296,8 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
 
     algo = TWAPAlgo(trade_direction=1,
                     volume=500,
-                    start_time='09:00:00',
-                    end_time='09:01:00',
+                    start_time='2021-06-01 09:00:00',
+                    end_time='2021-06-01 09:01:00',
                     no_of_slices=1,
                     bucket_placement_func=lambda no_of_slices: 0.5,
                     broker_data_feed=lob_feed)
@@ -348,7 +356,7 @@ class TestSimilarityEnvVsSim(unittest.TestCase):
 class TestTwoSlices(unittest.TestCase):
 
     lob_feed = HistoricalDataFeed(data_dir=os.path.join(ROOT_DIR, 'data/market/btcusdt/'),
-                                  instrument='btc_usdt')
+                                  instrument='btcusdt')
 
     # define the broker class
     broker = Broker(lob_feed)
@@ -373,9 +381,7 @@ class TestTwoSlices(unittest.TestCase):
                                    'second_high': 0},
                   'exec_config': {'exec_times': [1],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 1,
-                                   'samples_per_feed': 20,
-                                   'reset_feed': True},
+                  'reset_config': {'reset_num_episodes': 1,},
                   "seed_config": {"seed" : 0,},}
 
     # define action space

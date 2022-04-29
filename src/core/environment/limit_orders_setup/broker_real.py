@@ -114,10 +114,10 @@ class Broker(ABC):
 
         if type(algo).__name__ != 'RLAlgo':
             remaining_order = self.remaining_order['benchmark_algo']
-            self.data_feed.reset(time=self.current_dt_bmk.time().strftime('%H:%M:%S.%f'))
+            self.data_feed.reset(time=self.current_dt_bmk.strftime('%Y-%m-%d %H:%M:%S.%f'))
         else:
             remaining_order = self.remaining_order['rl_algo']
-            self.data_feed.reset(time=self.current_dt_rl.time().strftime('%H:%M:%S.%f'))
+            self.data_feed.reset(time=self.current_dt_rl.strftime('%Y-%m-%d %H:%M:%S.%f'))
 
         if len(remaining_order) != 0 and remaining_order[0]['type']== 'limit':
             # If we have remaining limit orders, we go through the LOBs until they are executed
@@ -158,7 +158,7 @@ class Broker(ABC):
 
         # If we have no remaining orders (for example after executing an entire limit order or after a bucket end),
         # we reset the datafeed to jump to the LOB corresponding to the next event.
-        self.data_feed.reset(time=event['time'].time().strftime('%H:%M:%S.%f'))
+        self.data_feed.reset(time=event['time'].strftime('%Y-%m-%d %H:%M:%S.%f'))
         dt, lob = self.data_feed.next_lob_snapshot()
         self._record_lob(dt, lob, algo)
         if type(algo).__name__ != 'RLAlgo':
@@ -170,9 +170,9 @@ class Broker(ABC):
     def place_next_order(self, algo, event, done, lob, vol=None):
 
         if type(algo).__name__ != 'RLAlgo':
-            self.data_feed.reset(time=self.current_dt_bmk.time().strftime('%H:%M:%S.%f'))
+            self.data_feed.reset(time=self.current_dt_bmk.strftime('%Y-%m-%d %H:%M:%S.%f'))
         else:
-            self.data_feed.reset(time=self.current_dt_rl.time().strftime('%H:%M:%S.%f'))
+            self.data_feed.reset(time=self.current_dt_rl.strftime('%Y-%m-%d %H:%M:%S.%f'))
 
         algo_order = algo.get_order_at_event(event, lob)
         if vol is not None:

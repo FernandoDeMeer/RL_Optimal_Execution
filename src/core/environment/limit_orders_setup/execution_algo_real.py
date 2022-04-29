@@ -111,8 +111,8 @@ class ExecutionAlgo:
         Args:
             trade_direction (int): The direction of the trade to execute, 1 stands for buying, -1 for selling.
             volume (int): volume to trade (i.e. parent order volume)
-            start_time (string): start of execution in '%H:%M:%S' format
-            end_time (string): end of execution in '%H:%M:%S' format
+            start_time (string): start of execution in '%Y-%m-%d %H:%M:%S' format
+            end_time (string): end of execution in '%Y-%m-%d %H:%M:%S' format
             no_of_slices (int): number of order splits within a bucket
             bucket_placement_func (func): function returning random splits of buckets
             tick_size (Decimal): tick size of the market the RL agent is trained on
@@ -247,7 +247,7 @@ class ExecutionAlgo:
         y.append(0)
 
         x = self.algo_events.copy()
-        x.insert(0, datetime.combine(self.date, datetime.strptime(self.start_time, '%H:%M:%S').time()))
+        x.insert(0, self.start_time)
 
         if trade_logs is not None:
             fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True)
@@ -302,10 +302,9 @@ class TWAPAlgo(ExecutionAlgo):
         v = lob.bids.get_price_list(lob.get_best_bid()).volume
         tick = Decimal(str(1 / (10 ** abs(v.as_tuple().exponent))))
         self.tick_size = tick
-        self.date = dt.date()
         # Derive trading schedules
-        start_time = datetime.combine(self.date, datetime.strptime(self.start_time, '%H:%M:%S').time())
-        end_time = datetime.combine(self.date, datetime.strptime(self.end_time, '%H:%M:%S').time())
+        start_time = datetime.strptime(self.start_time, '%Y-%m-%d %H:%M:%S')
+        end_time = datetime.strptime(self.end_time, '%Y-%m-%d %H:%M:%S')
         self.buckets = Bucket(start_time, end_time, self.rand_bucket_bounds_width)
 
         # split volume across buckets and check if this worked

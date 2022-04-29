@@ -255,7 +255,7 @@ if __name__ == "__main__":
         match = re.search(r'\d{4}_\d{2}_\d{2}', day_file)
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
-        env.broker.data_feed.load_specific_day_data(day_idx)
+        env.broker.data_feed.load_specific_day_data(date)
         d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
         d_outs_list_high_vol.append(d_out)
 
@@ -267,7 +267,7 @@ if __name__ == "__main__":
         match = re.search(r'\d{4}_\d{2}_\d{2}', day_file)
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
-        env.broker.data_feed.load_specific_day_data(day_idx)
+        env.broker.data_feed.load_specific_day_data(date)
         d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
         d_outa_list_low_vol.append(d_out)
 

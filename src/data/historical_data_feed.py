@@ -3,6 +3,7 @@ import copy
 import calendar
 import numpy as np
 from os import listdir, path
+import re
 from datetime import datetime, timedelta
 from src.data.data_feed import DataFeed
 from src.core.environment.env_utils import raw_to_order_book
@@ -11,12 +12,11 @@ from src.core.environment.env_utils import raw_to_order_book
 def get_time_idx_from_raw_data(data, t):
     """ Returns the index of data right before a given time 't' """
 
-    dt = datetime.utcfromtimestamp(data[-1] / 1000)
     try:
-        start_t = datetime.strptime(t, '%H:%M:%S.%f')
+        start_t = datetime.strptime(t, '%Y-%m-%d %H:%M:%S.%f')
     except:
-        start_t = datetime.strptime(t, '%H:%M:%S')
-    start_dt = datetime(dt.year, dt.month, dt.day, start_t.hour, start_t.minute, start_t.second, start_t.microsecond)
+        start_t = datetime.strptime(t, '%Y-%m-%d %H:%M:%S')
+    start_dt = datetime(start_t.year, start_t.month, start_t.day, start_t.hour, start_t.minute, start_t.second, start_t.microsecond)
     unix_t = calendar.timegm(start_dt.utctimetuple()) * 1e3 + start_dt.microsecond / 1e3
     idx = (np.abs(data - unix_t)).argmin()
     # These two lines were giving the lob_snapshot previous to dt, when it should be the one after If we are placing trades (to account for computing time/latency etc)
@@ -53,6 +53,7 @@ class HistoricalDataFeed(DataFeed):
 
             # load all files available
             self.binary_files = listdir("{}".format(data_dir))
+            self.dates_list = self.get_all_dates_from_files(self.data_dir)
         elif None not in (start_day, end_day):
 
             # load only relevant files between dates
@@ -63,6 +64,7 @@ class HistoricalDataFeed(DataFeed):
                     files_between_date.append(f)
                 start_day += timedelta(1)
             self.binary_files = files_between_date
+            self.dates_list = self.get_dates_from_files(self.binary_files)
         else:
             raise ValueError("'start_day' and 'end_day' have to be defined jointly!")
 
@@ -131,25 +133,24 @@ class HistoricalDataFeed(DataFeed):
         self.time = time
         self._select_row_idx()
 
-    def next_data(self):
-        """ Jumps to next file and loads data """
-
-        self.binary_file_idx += 1
-        if self.binary_file_idx > len(self.binary_files) - 1:
-            self.binary_file_idx = 0
-        self._load_data()
-        self.reset()
-
     def _load_data(self):
-        """ Load data from file """
+        """ Load data from all binary files files """
+        data = np.fromfile("{}/{}".format(self.data_dir, self.binary_files[0]), dtype=np.float64)
 
-        self.data = np.fromfile("{}/{}".format(self.data_dir, self.binary_files[self.binary_file_idx]), dtype=np.float64)
-        self.data = self.data.reshape(-1, 4 * self.lob_depth + 1)
+        for file in self.binary_files[1:]:
+            file_data = np.fromfile("{}/{}".format(self.data_dir, file), dtype=np.float64)
+            data = np.concatenate((data,file_data),axis = 0)
 
-    def load_specific_day_data(self, binary_file_idx):
+        self.data = data.reshape(-1, 4 * self.lob_depth + 1)
 
-        self.binary_file_idx = binary_file_idx
-        self._load_data()
+
+    def load_specific_day_data(self, instrument, date):
+
+        filename = "{}__{}.{}".format(instrument, date, "dat")
+
+        file_data = np.fromfile("{}/{}".format(self.data_dir, filename), dtype=np.float64)
+
+        self.data = file_data.reshape(-1, 4 * self.lob_depth + 1)
 
     def _select_row_idx(self):
         """ method specifically selecting 'data_row_idx' and '_remaining_rows_in_file' """
@@ -167,6 +168,7 @@ class HistoricalDataFeed(DataFeed):
     def get_daily_vols(self):
         volatilities = []
         for day in range(len(self.binary_files)):
+            self.load_specific_day_data(self.instrument,self.dates_list[day])
             mid_prices = []
             for lob_idx in range(self.data.shape[0]):
                 lob = self.data[lob_idx][1:].reshape(-1, self.lob_depth)
@@ -178,8 +180,6 @@ class HistoricalDataFeed(DataFeed):
 
             day_vol = np.std(np.array(mid_prices))
             volatilities.append(day_vol)
-            # Jump to the next day
-            self.next_data()
         self.day_volatilities = volatilities
         self.day_volatilities_ranking = np.argsort(volatilities)
 
@@ -197,3 +197,19 @@ class HistoricalDataFeed(DataFeed):
             return True
         else:
             raise TypeError('Comparing object is not of the same type.')
+
+    def get_dates_from_files(self,binary_files):
+        dates_list = []
+        for filename in binary_files:
+            date = re.findall("\d+\w\d+\w\d+", filename)
+            dates_list.append(date[0].replace('_','-'))
+        return dates_list
+
+    def get_all_dates_from_files(self, data_dir: str,):
+        dates_list = []
+        for filename in listdir(data_dir):
+            date = re.findall("\d+\w\d+\w\d+", filename)
+            dates_list.append(date[0].replace('_','-'))
+        return dates_list
+
+

@@ -47,7 +47,7 @@ def init_arg_parser():
 
     parser.add_argument(
         "--symbol",
-        choices=["btc_usdt"],
+        choices=["btcusdt"],
         default="btcusdt",
         help="Market symbol.")
 
@@ -133,9 +133,7 @@ config = {
                                     'second_high': 0},
                    'exec_config': {'exec_times': [5],
                                    'delete_vol': False},
-                   'reset_config': {'reset_num_episodes': 1000,
-                                    'samples_per_feed': 20,
-                                    'reset_feed': True},
+                   'reset_config': {'reset_num_episodes': 1000,},
                    'seed_config': {'seed': 0,},},
 
     # Eval
@@ -231,9 +229,7 @@ config = {
 #                              "second_high": 0},
 #             "exec_config": {"exec_times": [5, 10, 15],
 #                             "delete_vol": False},
-#             'reset_config': {'reset_num_episodes': 500 * 10,
-#                              'samples_per_feed': 500,
-#                              'reset_feed': True},
+#             'reset_config': {'reset_num_episodes': 500 * 10,},
 #         },
 #
 #         # Eval
