@@ -28,72 +28,12 @@ from ray.rllib.agents.ppo.appo import APPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.environment.limit_orders_setup.base_env_real import NarrowTradeLimitEnvDiscrete
 
 from ray.rllib.models import ModelCatalog
 from src.core.agent.ray_model import CustomRNNModel
 
 
-class NarrowTradeLimitEnvDQN(BaseEnv):
-
-    def __init__(self, *args, **kwargs):
-        super(NarrowTradeLimitEnvDQN, self).__init__(*args, **kwargs)
-
-    def _convert_action(self, action):
-        shift = 0.2
-        if action == 0:
-            action_out = 1 - shift
-        elif action == 1:
-            action_out = 1
-        elif action == 2:
-            action_out = 1 + shift
-        else:
-            raise ValueError
-        # action_out = 1
-        return action_out
-
-    def infer_volume_from_action(self, action):
-        vol_to_trade = Decimal(str(action)) * \
-                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
-        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
-        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
-        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
-            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        return vol_to_trade
-
-    #def reward_func(self):
-    #    """ Env with reward at end of each bucket as $ improvement of VWAP """
-
-    #    reward = 0
-    #    try:
-    #        if self.bucket_time != self.bucket_time_prev:
-    #            vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
-    #                                                                end_date=self.bucket_time)
-    #            if self.trade_dir == 1:
-    #                reward = np.sign(vwap_bmk - vwap_rl)
-    #            else:
-    #                reward = np.sign(vwap_rl - vwap_bmk)
-    #    except:
-    #        reward = 0
-    #    return reward
-
-    def reward_func(self):
-        """ Env with reward at end of each bucket as $ improvement of VWAP """
-        reward = 0
-        vol = float(np.sum(self.broker.benchmark_algo.volumes_per_trade[self.bucket_idx]))
-        try:
-            if self.bucket_time != self.bucket_time_prev:
-                vwap_bmk, vwap_rl = self.broker.calc_vwap_from_logs(start_date=self.bucket_time_prev,
-                                                                end_date=self.bucket_time)
-                if self.trade_dir == 1:
-                    # reward = np.sign(vwap_bmk - vwap_rl)
-                    reward = vol * (vwap_bmk - vwap_rl)
-                else:
-                    # reward = np.sign(vwap_rl - vwap_bmk)
-                    reward = vol * (vwap_rl - vwap_bmk)
-        except:
-            reward = 0
-        return reward
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -171,9 +111,9 @@ def lob_env_creator(env_config):
     exclude_keys = {'train_config'}
     env_config_clean = {k: env_config[k] for k in set(list(env_config.keys())) - set(exclude_keys)}
 
-    return NarrowTradeLimitEnvDQN(broker=Broker(lob_feed),
-                                  action_space=gym.spaces.Discrete(3),
-                                  config=env_config_clean)
+    return NarrowTradeLimitEnvDiscrete(broker=Broker(lob_feed),
+                                       action_space=gym.spaces.Discrete(3),
+                                       config=env_config_clean)
 
 
 def init_session_container(session_id):

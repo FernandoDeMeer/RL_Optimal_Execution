@@ -19,7 +19,7 @@ from ray.rllib.agents.ppo import PPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import DollarRewardAtStepEnv, RewardAtBucketEnv
+from src.core.environment.limit_orders_setup.base_env_real import NarrowTradeLimitEnvDiscrete
 from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog
@@ -31,6 +31,7 @@ from ray.rllib.agents.impala import impala
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 
+sessions_path = ROOT_DIR + r'\data\sessions'
 
 def init_arg_parser():
 
@@ -60,7 +61,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=10000000,
+        default=1,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -114,7 +115,7 @@ config = {
                    "train_config": {
                        "train": True,
                        "symbol": 'btcusdt',
-                       "train_data_periods": [2021, 6, 5, 2021, 6, 11],
+                       "train_data_periods": [2021, 6, 1, 2021, 6, 20],
                        "eval_data_periods": [2021, 6, 12, 2021, 6, 14]
                    },
                    'trade_config': {'trade_direction': 1,
@@ -125,15 +126,15 @@ config = {
                                     'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0,1,no_of_slices+2)[1:-1],2)),
                                     'rand_bucket_low': 0,
                                     'rand_bucket_high': 0},
-                   'start_config': {'hour_low': 12,
-                                    'hour_high': 12,
+                   'start_config': {'hour_low': 0,
+                                    'hour_high': 22,
                                     'minute_low': 0,
-                                    'minute_high': 0,
+                                    'minute_high': 59,
                                     'second_low': 0,
-                                    'second_high': 0},
+                                    'second_high': 59},
                    'exec_config': {'exec_times': [5],
                                    'delete_vol': False},
-                   'reset_config': {'reset_num_episodes': 1000,},
+                   'reset_config': {'reset_num_episodes': 1,},
                    'seed_config': {'seed': 0,},},
 
     # Eval
@@ -269,18 +270,17 @@ def lob_env_creator(env_config):
                                   start_day=data_start_day,
                                   end_day=data_end_day)
 
-    broker = Broker(lob_feed)
 
     # action_space = gym.spaces.Box(low=-1.0,
     #                               high=1.0,
     #                               shape=(1,),
     #                               dtype=np.float32)
 
-    action_space = gym.spaces.Discrete(n = 21)
+    action_space = gym.spaces.Discrete(n = 3)
 
-    return RewardAtBucketEnv(broker=broker,
-                           config=config["env_config"],
-                           action_space=action_space)
+    return NarrowTradeLimitEnvDiscrete(broker=Broker(lob_feed),
+                                       action_space=action_space,
+                                        config=env_config)
 
 
 def init_session_container(session_id):
@@ -301,7 +301,7 @@ def test_agent_one_episode(config, agent_path, eval_data_periods, symbol):
     agent = PPOTrainer(config=config)
     agent.restore(agent_path)
 
-    env = lob_env_creator(config)
+    env = lob_env_creator(config['env_config'])
 
     episode_reward = 0
     done = False
@@ -313,10 +313,71 @@ def test_agent_one_episode(config, agent_path, eval_data_periods, symbol):
 
     return episode_reward
 
+def train_eval_rolling_window(config,args):
+    from src.core.eval.evaluate import evaluate_session
+    """
+    Carry out a rolling-window training-evaluation experiment over a given time period.
+    Args:
+        config: Experiment config in ray-compatible format.
+        args: Experiment settings (framework, symbol, session_id, nr_of_episodes)
 
-if __name__ == "__main__":
+    Returns:
+        Training checkpoints and evaluation files for each training/eval period respectively.
+
+    """
+    train_eval_horizon = config["env_config"]["train_config"]["train_data_periods"]
+
+    data_start_day = datetime.datetime(year=train_eval_horizon[0], month=train_eval_horizon[1], day=train_eval_horizon[2])
+    data_end_day = datetime.datetime(year=train_eval_horizon[3], month=train_eval_horizon[4], day=train_eval_horizon[5])
+
+    delta = data_start_day - data_end_day   # returns timedelta
+    train_eval_period_days = []
+    for i in range(-delta.days + 1):
+        day = data_start_day + datetime.timedelta(days=i)
+        train_eval_period_days.append(day)
+
+    train_eval_period_limits = []
+    for i in range(len(train_eval_period_days)//5):
+        train_eval_period_limits.append(train_eval_period_days[5*i])
+        train_eval_period_limits.append(train_eval_period_days[5*(i+1)-1])
+
+    train_eval_periods =[]
+    for period_idx in range(len(train_eval_period_limits)//2-1):
+        train_eval_periods.append([(train_eval_period_limits[2*period_idx],train_eval_period_limits[2*period_idx+1]),
+                                   (train_eval_period_limits[2*period_idx+2],train_eval_period_limits[2*period_idx+3])])
+
+    for train_eval_period in train_eval_periods:
+
+        config["env_config"]["train_config"]["train_data_periods"] = [train_eval_period[0][0].year,
+                                                                      train_eval_period[0][0].month,
+                                                                      train_eval_period[0][0].day,
+                                                                      train_eval_period[0][1].year,
+                                                                      train_eval_period[0][1].month,
+                                                                      train_eval_period[0][1].day]
+        config["env_config"]["train_config"]["eval_data_periods"] = [train_eval_period[1][0].year,
+                                                                      train_eval_period[1][0].month,
+                                                                      train_eval_period[1][0].day,
+                                                                      train_eval_period[1][1].year,
+                                                                      train_eval_period[1][1].month,
+                                                                      train_eval_period[1][1].day]
+        train_agent(config,args)
+        evaluate_session(sessions_path)
 
 
+
+
+
+def train_agent(config,args):
+    """
+    Creates a session and trains an agent for a number of episodes specified in the args.
+    Args:
+        config: Experiment config in ray-compatible format.
+        args: Experiment settings (framework, symbol, session_id, nr_of_episodes)
+
+    Returns:
+        experiment: Experiment Analysis object + saves training checkpoints.
+
+    """
     # For debugging the ENV or other modules, set local_mode=True
     ray.init(num_cpus=args.num_cpus,
              local_mode=False,
@@ -342,15 +403,24 @@ if __name__ == "__main__":
                           local_dir=session_container_path,
                           max_failures=0
                           )
+    return experiment
 
-    checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial("episode_reward_mean"),
-                                                         metric="episode_reward_mean")
-    checkpoint_path = checkpoints[0][0]
+if __name__ == "__main__":
 
-    reward = test_agent_one_episode(config=config["env_config"],
-                                    agent_path=checkpoint_path,
-                                    eval_data_periods=[2021, 6, 21, 2021, 6, 21],
-                                    symbol="btcusdt")
-    print(reward)
+    train_eval_rolling_window(config,args)
+
+    # experiment = train_agent(config,args)
+    #
+    # evaluate_session(sessions_path)
+    #
+    # checkpoints = experiment.get_trial_checkpoints_paths(trial=experiment.get_best_trial("episode_reward_mean"),
+    #                                                      metric="episode_reward_mean")
+    # checkpoint_path = checkpoints[0][0]
+    #
+    # reward = test_agent_one_episode(config=config["env_config"],
+    #                                 agent_path=checkpoint_path,
+    #                                 eval_data_periods=[2021, 6, 21, 2021, 6, 21],
+    #                                 symbol="btcusdt")
+    # print(reward)
 
     ray.shutdown()
