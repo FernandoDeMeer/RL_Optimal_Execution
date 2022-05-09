@@ -61,7 +61,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=1,
+        default=2,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -346,6 +346,7 @@ def train_eval_rolling_window(config,args):
         train_eval_periods.append([(train_eval_period_limits[2*period_idx],train_eval_period_limits[2*period_idx+1]),
                                    (train_eval_period_limits[2*period_idx+2],train_eval_period_limits[2*period_idx+3])])
 
+    restore_previous_agent = False
     for train_eval_period in train_eval_periods:
 
         config["env_config"]["train_config"]["train_data_periods"] = [train_eval_period[0][0].year,
@@ -360,14 +361,15 @@ def train_eval_rolling_window(config,args):
                                                                       train_eval_period[1][1].year,
                                                                       train_eval_period[1][1].month,
                                                                       train_eval_period[1][1].day]
-        train_agent(config,args)
-        evaluate_session(sessions_path)
+        train_agent(config,args,restore_previous_agent)
+        evaluate_session(sessions_path= sessions_path ,trainer= 'PPO' ,config = config)
+        restore_previous_agent = True
 
 
 
 
 
-def train_agent(config,args):
+def train_agent(config,args,restore_previous_agent):
     """
     Creates a session and trains an agent for a number of episodes specified in the args.
     Args:
@@ -381,6 +383,7 @@ def train_agent(config,args):
     # For debugging the ENV or other modules, set local_mode=True
     ray.init(num_cpus=args.num_cpus,
              local_mode=False,
+             ignore_reinit_error= True,
              # local_mode=True,
              )
 
@@ -393,16 +396,35 @@ def train_agent(config,args):
     #     json.dump(config, f, ensure_ascii=False, indent=4)
 
     # PPOTrainer
-    experiment = tune.run("PPO",
-                          config=config,
-                          metric="episode_reward_mean",
-                          mode="max",
-                          checkpoint_freq=10,
-                          stop={"training_iteration": args.nr_episodes},
-                          checkpoint_at_end=True,
-                          local_dir=session_container_path,
-                          max_failures=0
-                          )
+    if restore_previous_agent:
+        from src.core.eval.evaluate import get_session_best_checkpoint_path
+        sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
+        checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer='PPO', session= np.min(sorted(sessions,reverse=True)[:2]))
+
+
+        experiment = tune.run("PPO",
+                              config=config,
+                              metric="episode_reward_mean",
+                              mode="max",
+                              checkpoint_freq=10,
+                              stop={"training_iteration": args.nr_episodes},
+                              checkpoint_at_end=True,
+                              local_dir=session_container_path,
+                              max_failures=0,
+                              restore= os.path.join(sessions_path,'PPO',checkpoint)
+                              )
+    else:
+        experiment = tune.run("PPO",
+                              config=config,
+                              metric="episode_reward_mean",
+                              mode="max",
+                              checkpoint_freq=10,
+                              stop={"training_iteration": args.nr_episodes},
+                              checkpoint_at_end=True,
+                              local_dir=session_container_path,
+                              max_failures=0
+                              )
+
     return experiment
 
 if __name__ == "__main__":

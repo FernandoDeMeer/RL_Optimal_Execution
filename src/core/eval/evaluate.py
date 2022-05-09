@@ -12,7 +12,7 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 
 from tqdm import tqdm
-from train_app import lob_env_creator, init_arg_parser, config, ROOT_DIR, DATA_DIR
+from train_app import lob_env_creator, init_arg_parser, ROOT_DIR, DATA_DIR
 from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 
 from src.core.agent.ray_model import CustomRNNModel
@@ -192,9 +192,9 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
     fig.savefig(session_dir + r"\evaluation_graphs_{}.png".format(eval_period_tag))
 
 
-def get_session_best_checkpoint_path(session_path, session,):
+def get_session_best_checkpoint_path(session_path,trainer, session,):
 
-    session_path = session_path + r'\{}\PPO'.format(str(session))
+    session_path = session_path + r'\{}\{}'.format(str(session),trainer)
     session_filename = [f for f in os.listdir(session_path) if isdir(join(session_path, f))]
     sessions_path = session_path + r'\{}'.format(session_filename[0])
 
@@ -230,10 +230,10 @@ def get_n_highest_and_lowest_vol_days(env,n):
 
     return highest_vol_days, lowest_vol_days
 
-def evaluate_session(sessions_path):
+def evaluate_session(sessions_path,config,trainer):
 
     sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
-    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, session= np.max(sessions))
+    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer=trainer, session= np.max(sessions))
 
     config["env_config"]["train_config"]["train"] = False # To load only eval_data_periods data
     config["num_workers"] = 0
@@ -259,7 +259,7 @@ def evaluate_session(sessions_path):
                                                                   config["env_config"]["train_config"]["eval_data_periods"][5],)
                    )
 
-def evaluate_session_by_volatility(sessions_path):
+def evaluate_session_by_volatility(sessions_path,config):
 
     sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
     checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, session= np.max(sessions))
@@ -321,6 +321,7 @@ def evaluate_session_by_volatility(sessions_path):
 
 
 if __name__ == "__main__":
+    from train_app import config
 
     args = init_arg_parser()
 
@@ -331,7 +332,7 @@ if __name__ == "__main__":
 
     sessions_path = ROOT_DIR + r'\data\sessions'
     sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
-    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, session= np.max(sessions))
+    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer= 'PPO', session= np.max(sessions))
 
     config["env_config"]["train_config"]["train"] = False # To load only eval_data_periods data
     config["num_workers"] = 0
