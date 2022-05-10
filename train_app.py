@@ -61,7 +61,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=2,
+        default=100,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -347,6 +347,7 @@ def train_eval_rolling_window(config,args):
                                    (train_eval_period_limits[2*period_idx+2],train_eval_period_limits[2*period_idx+3])])
 
     restore_previous_agent = False
+    session_idx = 1
     for train_eval_period in train_eval_periods:
 
         config["env_config"]["train_config"]["train_data_periods"] = [train_eval_period[0][0].year,
@@ -361,21 +362,23 @@ def train_eval_rolling_window(config,args):
                                                                       train_eval_period[1][1].year,
                                                                       train_eval_period[1][1].month,
                                                                       train_eval_period[1][1].day]
-        train_agent(config,args,restore_previous_agent)
+        train_agent(config,args,restore_previous_agent,session_idx = session_idx)
         evaluate_session(sessions_path= sessions_path ,trainer= 'PPO' ,config = config)
         restore_previous_agent = True
+        session_idx += 1
 
 
 
 
 
-def train_agent(config,args,restore_previous_agent):
+def train_agent(config,args,restore_previous_agent,session_idx):
     """
     Creates a session and trains an agent for a number of episodes specified in the args.
     Args:
         config: Experiment config in ray-compatible format.
         args: Experiment settings (framework, symbol, session_id, nr_of_episodes)
-
+        restore_previous_agent: Bool. If True, the best performing checkpoint of the previous session will be loaded at
+        the start of training.
     Returns:
         experiment: Experiment Analysis object + saves training checkpoints.
 
@@ -407,7 +410,7 @@ def train_agent(config,args,restore_previous_agent):
                               metric="episode_reward_mean",
                               mode="max",
                               checkpoint_freq=10,
-                              stop={"training_iteration": args.nr_episodes},
+                              stop={"training_iteration": session_idx * args.nr_episodes},
                               checkpoint_at_end=True,
                               local_dir=session_container_path,
                               max_failures=0,

@@ -249,7 +249,7 @@ def evaluate_session(sessions_path,config,trainer):
     # Evaluate on the entire eval period
 
     env = lob_env_creator(env_config= config["env_config"])
-    d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 2,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
+    d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
                    eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                   config["env_config"]["train_config"]["eval_data_periods"][1],
