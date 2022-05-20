@@ -284,11 +284,11 @@ class ExecutionAlgo:
 
     def _split_volume_across_buckets(self):
         """ splits parent order volumes across the buckets """
-        NotImplementedError
+        raise NotImplementedError
 
     def _split_volume_within_buckets(self):
         """ splits the volume of each bucket across the different trades within """
-        NotImplementedError
+        raise NotImplementedError
 
 
 class TWAPAlgo(ExecutionAlgo):

@@ -69,6 +69,8 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
     vwap_bmk = []
     vwap_rl = []
     vol_percentages = []
+    # execution_time_bmk = []
+    # execution_time_rl = []
 
     for _ in tqdm(range(nr_episodes), desc="Evaluation of agent"):
         obs = env.reset()
@@ -79,18 +81,24 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
             action, state, _ = trainer.compute_action(obs,state = state)
             obs, reward, done, info = env.step(action)
             episode_reward += reward
-
+        # Extract the results of both algos
         reward_vec.append(episode_reward)
         vwap_bmk.append(env.broker.benchmark_algo.bmk_vwap)
         vwap_rl.append(env.broker.rl_algo.rl_vwap)
         vol_percentages.append(np.mean(np.array(env.broker.rl_algo.volumes_per_trade)/
                                        np.array(env.broker.rl_algo.bucket_volumes)[:,None],axis= 0,dtype=np.float32))
+        # execution_time_bmk.append((datetime.strptime(env.broker.trade_logs['benchmark_algo'][-1]['timestamp'], '%Y-%m-%d %H:%M:%S.%f') -
+        #                            datetime.strptime(env.broker.trade_logs['benchmark_algo'][0]['timestamp'], '%Y-%m-%d %H:%M:%S.%f')).seconds)
+        # execution_time_rl.append((datetime.strptime(env.broker.trade_logs['rl_algo'][-1]['timestamp'], '%Y-%m-%d %H:%M:%S.%f') -
+        #                            datetime.strptime(env.broker.trade_logs['rl_algo'][0]['timestamp'], '%Y-%m-%d %H:%M:%S.%f')).seconds)
 
+    # Calculate performance statistics from results
     outperf = [True if vwap > vwap_rl[idx] else False for idx, vwap in enumerate(vwap_bmk)]
     vwap_perc_diff = (np.array(vwap_bmk)-np.array(vwap_rl)) / np.array(vwap_bmk)
     downside_median = np.median(vwap_perc_diff[outperf])
     upside_median = np.median(vwap_perc_diff[[not elem for elem in outperf]])
     vol_percentages_avg, error_vol_percentages = tolerant_mean(vol_percentages)
+    # execution_speeds = np.array(execution_time_bmk) - np.array(execution_time_rl)
 
     # after each episode, collect execution prices
     d_out = {'rewards': np.array(reward_vec),
@@ -126,8 +134,9 @@ def plot_eval_day(session_dir, d_out, day):
     axs[0, 1].set(xlabel='Execution Price', ylabel='Probability')
     axs[0, 1].legend(loc = "upper left")
 
-    axs[1, 0].hist(100*d_out['vwap_diff'], density=True, bins=50)
-    axs[1, 0].set_title('Difference of Benchmark vs. RL Execution Price')
+    price_diff_percent_avg = np.average(100*d_out['vwap_diff'])
+    axs[1, 0].hist(d_out['vwap_diff'], density=True, bins=50)
+    axs[1, 0].set_title('% Differences of Execution Prices, Average: {:.2e}%'.format(round(price_diff_percent_avg,4)))
     axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Probability')
 
     axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*d_out['vol_percentages'],
@@ -159,19 +168,21 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
     fig, axs = plt.subplots(2, 2, figsize=(14,10))
     plt.suptitle("Evaluation from {} ".format(eval_period_tag), fontsize=14)
 
-    axs[0, 0].hist(d_out['rewards'], density=True, bins=50)
-    axs[0, 0].set_title('Rewards from RL Agent')
+    axs[0, 0].hist(d_out['rewards'], bins=50)
+    axs[0, 0].set_title('Rewards from the RL Agent')
     axs[0, 0].set(xlabel='Reward', ylabel='Frequency')
 
-    axs[0, 1].hist(d_out['vwap_bmk'], alpha=0.5, density=True, bins=50, label= 'Benchmark VWAP')
-    axs[0, 1].hist(d_out['vwap_rl'], alpha=0.5, density=True, bins=50, label = 'RL VWAP')
-    axs[0, 1].set_title('Benchmark and RL Execution Price')
-    axs[0, 1].set(xlabel='Execution Price', ylabel='Probability')
+    axs[0, 1].hist(d_out['vwap_bmk'], alpha=0.5, bins=50, label= 'Benchmark VWAP')
+    axs[0, 1].hist(d_out['vwap_rl'], alpha=0.5, bins=50, label = 'RL VWAP')
+    axs[0, 1].set_title('Benchmark vs RL Execution Prices')
+    axs[0, 1].set(xlabel='Execution Price', ylabel='Frequency')
     axs[0, 1].legend(loc = "upper left")
 
-    axs[1, 0].hist(100*d_out['vwap_diff'], density=True, bins=50)
-    axs[1, 0].set_title('Difference of Benchmark vs. RL Execution Price')
-    axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Probability')
+    price_diff_percent_avg = np.average(100*np.array(d_out['vwap_diff']))
+    axs[1, 0].hist(100*np.array(d_out['vwap_diff']), bins=50)
+    axs[1, 0].set_title('% Differences of Execution Prices, Average: {:.4e}%'.format(round(price_diff_percent_avg,4)))
+    axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Frequency')
+
     try:
         axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*d_out['vol_percentages'],
                       align='center',
@@ -184,7 +195,7 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
                       alpha=0.5,
                       ecolor='black',
                       capsize=10)
-    axs[1, 1].set_title('Average % of the volume executed per Order Placement in Bucket')
+    axs[1, 1].set_title('Average % of the volume executed per Order Placement in each Bucket')
     axs[1, 1].set(xlabel= 'Order Number', ylabel= 'Volume (%)')
 
     # plt.show()
@@ -249,15 +260,28 @@ def evaluate_session(sessions_path,config,trainer):
     # Evaluate on the entire eval period
 
     env = lob_env_creator(env_config= config["env_config"])
-    d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
-    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
-                   eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
-                                                                  config["env_config"]["train_config"]["eval_data_periods"][1],
-                                                                  config["env_config"]["train_config"]["eval_data_periods"][2],
-                                                                  config["env_config"]["train_config"]["eval_data_periods"][3],
-                                                                  config["env_config"]["train_config"]["eval_data_periods"][4],
-                                                                  config["env_config"]["train_config"]["eval_data_periods"][5],)
-                   )
+    try:
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,
+                              session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
+        plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
+                       eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][1],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][2],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][3],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][4],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][5],))
+    except:
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,
+                              session_dir = sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), plot=False)
+        plot_eval_days(session_dir=sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), d_outs_list= d_out,
+                       eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][1],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][2],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][3],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][4],
+                                                                      config["env_config"]["train_config"]["eval_data_periods"][5],))
+
+
 
 def evaluate_session_by_volatility(sessions_path,config):
 

@@ -405,5 +405,3 @@ class TestTwoSlices(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-#TODO: Add another test to make sure we can jump between days in an execution :D 

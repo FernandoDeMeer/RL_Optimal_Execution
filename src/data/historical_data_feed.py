@@ -128,13 +128,13 @@ class HistoricalDataFeed(DataFeed):
             return timestamp_dts, output
 
     def reset(self, time=None):
-        """ Reset the datafeed and set from where to start sampling """
+        """ Reset the datafeed and set from when to start sampling """
 
         self.time = time
         self._select_row_idx()
 
     def _load_data(self):
-        """ Load data from all binary files files """
+        """ Load data from all binary files """
         data = np.fromfile("{}/{}".format(self.data_dir, self.binary_files[0]), dtype=np.float64)
 
         for file in self.binary_files[1:]:

@@ -1,6 +1,8 @@
 #
 #   Reinforcement Learning Optimal Trade Execution
 #
+import shutil
+import copy
 
 import os
 import time
@@ -61,7 +63,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=100,
+        default=2,
         help="Number of episodes to train.")
 
     return parser.parse_args()
@@ -314,7 +316,6 @@ def test_agent_one_episode(config, agent_path, eval_data_periods, symbol):
     return episode_reward
 
 def train_eval_rolling_window(config,args):
-    from src.core.eval.evaluate import evaluate_session
     """
     Carry out a rolling-window training-evaluation experiment over a given time period.
     Args:
@@ -323,8 +324,9 @@ def train_eval_rolling_window(config,args):
 
     Returns:
         Training checkpoints and evaluation files for each training/eval period respectively.
-
     """
+    from src.core.eval.evaluate import evaluate_session
+
     train_eval_horizon = config["env_config"]["train_config"]["train_data_periods"]
 
     data_start_day = datetime.datetime(year=train_eval_horizon[0], month=train_eval_horizon[1], day=train_eval_horizon[2])
@@ -397,6 +399,26 @@ def train_agent(config,args,restore_previous_agent,session_idx):
     session_container_path = init_session_container(args.session_id)
     # with open(os.path.join(session_container_path, "config.json"), "a", encoding="utf-8") as f:
     #     json.dump(config, f, ensure_ascii=False, indent=4)
+
+    with open("{}/params.txt".format(session_container_path), "w") as env_params_file:
+        env_config_copy = copy.deepcopy(config)["env_config"]
+        f__ = env_config_copy["trade_config"]["bucket_func"]
+        env_config_copy["trade_config"]["bucket_func"] = f__(0)
+        try:
+            env_config_copy["nn_model"] = config["model"]
+        except:
+            pass
+
+        env_params_file.write(json.dumps(env_config_copy,
+                                         indent=4,
+                                         separators=(',', ': ')))
+
+    shutil.make_archive(base_dir="src",
+                        root_dir=os.getcwd(),
+                        format='zip',
+                        base_name=os.path.join(session_container_path, "src"))
+    print("")
+
 
     # PPOTrainer
     if restore_previous_agent:

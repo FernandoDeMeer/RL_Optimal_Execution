@@ -29,6 +29,7 @@ from ray.rllib.agents.ppo.appo import APPOTrainer
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker_real import Broker
 from src.core.environment.limit_orders_setup.base_env_real import NarrowTradeLimitEnvDiscrete
+from train_app import train_eval_rolling_window
 
 from ray.rllib.models import ModelCatalog
 from src.core.agent.ray_model import CustomRNNModel
@@ -81,7 +82,7 @@ def init_arg_parser():
     parser.add_argument(
         "--stop-timesteps",
         type=int,
-        default=100000,
+        default=10000000,
         help="Number of timesteps to train.")
 
     parser.add_argument(
@@ -232,26 +233,26 @@ if __name__ == "__main__":
                   "train_config": {
                       "train": True,
                       "symbol": 'btcusdt',
-                      "train_data_periods": [2021, 6, 21, 2021, 6, 21],
-                      "eval_data_periods": [2021, 6, 22, 2021, 6, 22]
+                      "train_data_periods": [2021, 6, 1, 2021, 6, 20],
+                      "eval_data_periods": [2021, 6, 12, 2021, 6, 14]
                   },
                   'trade_config': {'trade_direction': 1,
                                    'vol_low': 100,
                                    'vol_high': 100,
                                    'no_slices_low': 3,
                                    'no_slices_high': 3,
-                                   'bucket_func': lambda no_of_slices: [0.25, 0.5, 0.75],
+                                   'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0,1,no_of_slices+2)[1:-1],2)),
                                    'rand_bucket_low': 0,
                                    'rand_bucket_high': 0},
-                  'start_config': {'hour_low': 1,
+                  'start_config': {'hour_low': 0,
                                    'hour_high': 22,
                                    'minute_low': 0,
-                                   'minute_high': 55,
+                                   'minute_high': 59,
                                    'second_low': 0,
-                                   'second_high': 55},
+                                   'second_high': 59},
                   'exec_config': {'exec_times': [5],
                                   'delete_vol': False},
-                  'reset_config': {'reset_num_episodes': 30,},
+                  'reset_config': {'reset_num_episodes': 1,},
                   'seed_config': {'seed': 0}}
     env_config = {"env_config": env_config}
     APPO_CONFIG.update(env_config)
