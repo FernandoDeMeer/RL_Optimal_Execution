@@ -2,8 +2,8 @@ import unittest
 import numpy as np
 from datetime import datetime, timedelta
 
-from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo, BUCKET_SIZES_IN_SECS
-from src.core.environment.limit_orders_setup.broker_real import Broker
+from src.core.environment.limit_orders_setup.execution_algo import TWAPAlgo, BUCKET_SIZES_IN_SECS
+from src.core.environment.limit_orders_setup.broker import Broker
 from src.core.environment.env_utils import raw_to_order_book
 
 

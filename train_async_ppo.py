@@ -27,8 +27,8 @@ from ray.rllib.agents.impala import impala
 from ray.rllib.agents.ppo.appo import APPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import NarrowTradeLimitEnvDiscrete
+from src.core.environment.limit_orders_setup.broker import Broker
+from src.core.environment.limit_orders_setup.base_env import NarrowTradeLimitEnvDiscrete
 from train_app import train_eval_rolling_window
 
 from ray.rllib.models import ModelCatalog

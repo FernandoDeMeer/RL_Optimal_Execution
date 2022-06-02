@@ -106,7 +106,7 @@ class Bucket:
 
 
 class ExecutionAlgo:
-    """ The ExecutionAlgo class is a parent class for the benchmark algos of our RL agent.
+    """ Parent class for the benchmark algos as well as the RL algo itself.
 
         Args:
             trade_direction (int): The direction of the trade to execute, 1 stands for buying, -1 for selling.
@@ -118,7 +118,7 @@ class ExecutionAlgo:
             tick_size (Decimal): tick size of the market the RL agent is trained on
             rand_bucket_bounds_width (int): Max % of the bucket width to add/substract from each bucket
 
-    """
+        """
 
     def __init__(self,
                  trade_direction,

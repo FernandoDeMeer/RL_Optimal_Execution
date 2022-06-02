@@ -4,9 +4,9 @@ from datetime import datetime
 import gym
 import numpy as np
 
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo
-from src.core.environment.limit_orders_setup.base_env_real import RewardAtStepEnv
+from src.core.environment.limit_orders_setup.broker import Broker
+from src.core.environment.limit_orders_setup.execution_algo import TWAPAlgo
+from src.core.environment.limit_orders_setup.base_env import RewardAtStepEnv
 from src.data.historical_data_feed import HistoricalDataFeed
 
 # from train_app import ROOT_DIR

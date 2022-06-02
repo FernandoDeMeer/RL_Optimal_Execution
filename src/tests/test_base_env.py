@@ -7,8 +7,8 @@ import datetime
 from decimal import Decimal
 import numpy as np
 
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv, ExampleEnvRewardAtStep, TWAPAlgo
-from src.core.environment.limit_orders_setup.broker_real import Broker
+from src.core.environment.limit_orders_setup.base_env import BaseEnv, ExampleEnvRewardAtStep, TWAPAlgo
+from src.core.environment.limit_orders_setup.broker import Broker
 from src.data.historical_data_feed import HistoricalDataFeed
 
 

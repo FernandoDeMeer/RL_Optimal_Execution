@@ -16,8 +16,8 @@ from ray.rllib.agents import dqn
 from ray.tune.logger import pretty_print
 
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import BaseEnv
+from src.core.environment.limit_orders_setup.broker import Broker
+from src.core.environment.limit_orders_setup.base_env import BaseEnv
 
 
 class NarrowTradeLimitEnvDQN(BaseEnv):

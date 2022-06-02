@@ -20,8 +20,8 @@ from ray.tune.registry import register_env
 from ray.rllib.agents.ppo import PPOTrainer
 
 from src.data.historical_data_feed import HistoricalDataFeed
-from src.core.environment.limit_orders_setup.broker_real import Broker
-from src.core.environment.limit_orders_setup.base_env_real import NarrowTradeLimitEnvDiscrete
+from src.core.environment.limit_orders_setup.broker import Broker
+from src.core.environment.limit_orders_setup.base_env import NarrowTradeLimitEnvDiscrete
 from src.core.agent.ray_model import CustomRNNModel
 
 from ray.rllib.models import ModelCatalog

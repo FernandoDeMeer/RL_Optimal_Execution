@@ -8,7 +8,7 @@ from gym.utils import seeding
 from decimal import Decimal
 from abc import ABC
 
-from src.core.environment.limit_orders_setup.execution_algo_real import TWAPAlgo, RLAlgo
+from src.core.environment.limit_orders_setup.execution_algo import TWAPAlgo, RLAlgo
 from src.ui.ui_comm import UIServer
 from src.ui.ui_comm import Charts as Charts
 
