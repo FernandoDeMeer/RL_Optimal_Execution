@@ -111,7 +111,7 @@ def eval_agent(trainer, env, nr_episodes,):
              'downside_median': downside_median,
              'upside_median': upside_median}
 
-    # env.broker.benchmark_algo.plot_schedule(env.broker.trade_logs['benchmark_algo'])
+    # env.broker.rl_algo.plot_schedule(env.broker.trade_logs['rl_algo'])
 
     return d_out, stats
 

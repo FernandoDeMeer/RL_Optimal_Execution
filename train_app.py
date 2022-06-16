@@ -63,7 +63,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=2,
+        default=1,
         help="Number of episodes to train.")
 
     return parser.parse_args()

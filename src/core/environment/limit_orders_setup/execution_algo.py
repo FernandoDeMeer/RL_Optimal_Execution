@@ -144,6 +144,11 @@ class ExecutionAlgo:
     def reset(self):
         if type(self).__name__ != 'RLAlgo':
             self.volumes_per_trade = copy.deepcopy(self.volumes_per_trade_default)
+        else:
+            volumes_per_trade = []
+            for bucket in range(len(self.volumes_per_trade)):
+                volumes_per_trade.append(list([Decimal(0) for order_event in self.volumes_per_trade_default[bucket]]))
+            self.volumes_per_trade = volumes_per_trade
         self.vol_remaining = Decimal(str(self.volume))
         self.bucket_vol_remaining = self.bucket_volumes.copy()
         self.event_idx = 0
@@ -238,7 +243,7 @@ class ExecutionAlgo:
 
         import matplotlib.pyplot as plt
         # Get all the volumes of all limit orders
-        y = [float(item) for sublist in self.volumes_per_trade_default for item in sublist]
+        y = [float(item) for sublist in self.volumes_per_trade for item in sublist]
         # And the bucket bounds
         i = self.no_of_slices
         while i < len(y):

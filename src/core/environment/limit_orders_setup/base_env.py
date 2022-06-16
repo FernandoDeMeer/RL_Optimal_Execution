@@ -211,6 +211,8 @@ class BaseEnv(gym.Env, ABC):
         # convert action if necessary
         action = self._convert_action(action)
         vol_to_trade = self.infer_volume_from_action(action)
+        # Update the volumes_per_trade
+        self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] = vol_to_trade
 
         # simulate both benchmark and rl algo until before the next action is placed...
         self.event_time_prev = self.event_bmk['time']
@@ -285,9 +287,10 @@ class BaseEnv(gym.Env, ABC):
 
     def infer_volume_from_action(self, action):
         """ Logic for inferring the volume from the action placed in the env """
-
-        vol_to_trade = Decimal(str(action)) * \
-                       self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx] # We trade {0,0.1,0.2,...2}*TWAP's volume
+        current_executing_volume = self.broker.rl_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx]
+        vol_to_add = Decimal(str(action)) * \
+                       self.broker.benchmark_algo.volumes_per_trade_default[self.broker.rl_algo.bucket_idx][self.broker.rl_algo.order_idx]# We add {0.8,1,1.2}*TWAP's volume
+        vol_to_trade = current_executing_volume + vol_to_add
         factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
         vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
         if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
@@ -576,15 +579,6 @@ class NarrowTradeLimitEnvContinuous(BaseEnv):
         action_out = action_min + action_rescaled * (action_max - action_min)
         return action_out
 
-    def infer_volume_from_action(self, action):
-        vol_to_trade = Decimal(str(action)) * \
-                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
-        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
-        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
-        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
-            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        return vol_to_trade
-
     def reward_func(self):
         """ Env with reward at end of each bucket as $ price improvement of VWAP """
 
@@ -619,15 +613,6 @@ class NarrowTradeLimitEnvDiscrete(BaseEnv):
             raise ValueError
         # action_out = 1
         return action_out
-
-    def infer_volume_from_action(self, action):
-        vol_to_trade = Decimal(str(action)) * \
-                       self.broker.benchmark_algo.volumes_per_trade[self.broker.rl_algo.bucket_idx][self.broker.benchmark_algo.order_idx]
-        factor = 10 ** (- self.broker.benchmark_algo.tick_size.as_tuple().exponent)
-        vol_to_trade = Decimal(str(math.floor(vol_to_trade * factor) / factor))
-        if vol_to_trade > self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]:
-            vol_to_trade = self.broker.rl_algo.bucket_vol_remaining[self.broker.rl_algo.bucket_idx]
-        return vol_to_trade
 
     #def reward_func(self):
     #    """ Env with reward at end of each bucket as $ improvement of VWAP """
