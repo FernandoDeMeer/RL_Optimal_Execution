@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 
 HISTORICAL_DATA_FEED    = "historical"
-GAN_LOB_DATA_FEED       = "gan_lob"
-
 
 class DataFeed(ABC):
 

@@ -104,7 +104,7 @@ class BaseEnv(gym.Env, ABC):
             self.reset_counter = 0
         self.reset_counter += 1
 
-        # instantiate benchark algo
+        # instantiate benchmark algo
         self.broker.benchmark_algo = TWAPAlgo(trade_direction=self.trade_dir,
                                               volume=self.volume,
                                               no_of_slices=self.no_of_slices,

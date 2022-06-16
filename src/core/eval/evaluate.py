@@ -18,14 +18,14 @@ from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 from src.core.agent.ray_model import CustomRNNModel
 
 
-def eval_agent_one_day(trainer, env, nr_episodes,session_dir,day, plot=True, ):
+def eval_agent_one_day(trainer, env, nr_episodes,session_dir,day, plot=False, ):
 
     reward_vec = []
     vwap_bmk = []
     vwap_rl = []
     vol_percentages = []
 
-    for _ in tqdm(range(nr_episodes), desc="Evaluation of agent"):
+    for _ in tqdm(range(nr_episodes), desc="Evaluation of the RL agent"):
         obs = env.reset()
         episode_reward = 0
         done = False
@@ -47,7 +47,7 @@ def eval_agent_one_day(trainer, env, nr_episodes,session_dir,day, plot=True, ):
     upside_median = np.median(vwap_perc_diff[[not elem for elem in outperf]])
     vol_percentages_avg, error_vol_percentages = tolerant_mean(vol_percentages)
 
-    # after each episode, collect execution prices
+    # Collect results
     d_out = {'rewards': np.array(reward_vec),
              'vwap_bmk': np.array(vwap_bmk),
              'vwap_rl': np.array(vwap_rl),
@@ -63,7 +63,7 @@ def eval_agent_one_day(trainer, env, nr_episodes,session_dir,day, plot=True, ):
 
     return d_out, stats
 
-def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
+def eval_agent(trainer, env, nr_episodes,):
 
     reward_vec = []
     vwap_bmk = []
@@ -72,7 +72,7 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
     # execution_time_bmk = []
     # execution_time_rl = []
 
-    for _ in tqdm(range(nr_episodes), desc="Evaluation of agent"):
+    for _ in tqdm(range(nr_episodes), desc="Evaluation of the RL agent"):
         obs = env.reset()
         episode_reward = 0
         done = False
@@ -100,7 +100,7 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
     vol_percentages_avg, error_vol_percentages = tolerant_mean(vol_percentages)
     # execution_speeds = np.array(execution_time_bmk) - np.array(execution_time_rl)
 
-    # after each episode, collect execution prices
+    # Collect results
     d_out = {'rewards': np.array(reward_vec),
              'vwap_bmk': np.array(vwap_bmk),
              'vwap_rl': np.array(vwap_rl),
@@ -111,8 +111,7 @@ def eval_agent(trainer, env, nr_episodes,session_dir, plot=True, ):
              'downside_median': downside_median,
              'upside_median': upside_median}
 
-    if plot:
-        plot_eval_days(session_dir, d_out, days_class= 'all')
+    # env.broker.benchmark_algo.plot_schedule(env.broker.trade_logs['benchmark_algo'])
 
     return d_out, stats
 
@@ -152,6 +151,7 @@ def plot_eval_day(session_dir, d_out, day):
     fig.savefig(session_dir + r"\evaluation_graphs_{}.png".format(day))
 
 def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
+    # Merge all the dictionaries together
     d_out = {}
     if type(d_outs_list) != dict:
         for k in d_outs_list[0].keys():
@@ -261,8 +261,7 @@ def evaluate_session(sessions_path,config,trainer):
 
     env = lob_env_creator(env_config= config["env_config"])
     try:
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,
-                              session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,)
         plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
                        eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][1],
@@ -271,8 +270,7 @@ def evaluate_session(sessions_path,config,trainer):
                                                                       config["env_config"]["train_config"]["eval_data_periods"][4],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][5],))
     except:
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,
-                              session_dir = sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), plot=False)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,)
         plot_eval_days(session_dir=sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), d_outs_list= d_out,
                        eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][1],
@@ -303,7 +301,7 @@ def evaluate_session_by_volatility(sessions_path,config):
     n_days = 3
     highest_vol_days, lowest_vol_days = get_n_highest_and_lowest_vol_days(env, n_days)
     d_outs_list_high_vol = []
-    d_outa_list_low_vol = []
+    d_outs_list_low_vol = []
 
     for day in range(len(highest_vol_days)):
         day_idx = env.broker.data_feed.day_volatilities_ranking[day]
@@ -312,7 +310,7 @@ def evaluate_session_by_volatility(sessions_path,config):
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
         d_outs_list_high_vol.append(d_out)
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_high_vol,
@@ -331,10 +329,10 @@ def evaluate_session_by_volatility(sessions_path,config):
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
-        d_outa_list_low_vol.append(d_out)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
+        d_outs_list_low_vol.append(d_out)
 
-    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outa_list_low_vol,
+    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_low_vol,
                    eval_period_tag = 'the {} Lowest Volatility days from {}-{}-{} to {}-{}-{}'.format(n_days,
                                                                                                     config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                                                     config["env_config"]["train_config"]["eval_data_periods"][1],
@@ -381,10 +379,10 @@ if __name__ == "__main__":
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
         d_outs_list_high_vol.append(d_out)
 
-    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_high_vol, days_class= 'High_Vol')
+    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_high_vol, eval_period_tag= 'High_Vol')
 
     for day in range(len(lowest_vol_days)):
         day_idx = env.broker.data_feed.day_volatilities_ranking[-(day+1)]
@@ -393,14 +391,14 @@ if __name__ == "__main__":
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent_one_day(trainer= agent,env= env ,nr_episodes= 25,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))),day = date, plot=False)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
         d_outa_list_low_vol.append(d_out)
 
-    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outa_list_low_vol, days_class= 'Low_Vol')
+    plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outa_list_low_vol, eval_period_tag= 'Low_Vol')
 
 
     # # Evaluate on the entire eval period
     # config["env_config"]["reset_config"]["reset_feed"] = True # To make sure we jump between days of the eval_period
     # env = lob_env_creator(env_config= config["env_config"])
-    # d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 100,session_dir = sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), plot=False)
-    # plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out, days_class= 'All')
+    # d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 100,)
+    # plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out, eval_period_tag= 'All')

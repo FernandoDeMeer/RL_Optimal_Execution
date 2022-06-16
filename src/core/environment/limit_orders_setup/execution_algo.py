@@ -237,8 +237,9 @@ class ExecutionAlgo:
         """ Plots the expected execution schedule determined ahead of trading """
 
         import matplotlib.pyplot as plt
-
-        y = [float(item) for sublist in self.volumes_per_trade for item in sublist]
+        # Get all the volumes of all limit orders
+        y = [float(item) for sublist in self.volumes_per_trade_default for item in sublist]
+        # And the bucket bounds
         i = self.no_of_slices
         while i < len(y):
             y.insert(i, 0)
@@ -247,15 +248,15 @@ class ExecutionAlgo:
         y.append(0)
 
         x = self.algo_events.copy()
-        x.insert(0, self.start_time)
+        x.insert(0, datetime.strptime(self.start_time, '%Y-%m-%d %H:%M:%S'))
 
         if trade_logs is not None:
-            fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True)
+            fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, sharey= True)
             x_trades = [datetime.strptime(log['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
                             for log in trade_logs if log['message'] == 'trade']
             y_trades = [float(log['quantity']) for log in trade_logs if log['message'] == 'trade']
-            ax1.bar(x, y, width=0.00005, alpha=0.8, edgecolor='k', linewidth=0.5)
-            ax2.bar(x_trades, y_trades, color='r', width=0.00005, alpha=0.8, edgecolor='k', linewidth=0.5)
+            ax1.bar(x, y, color = 'b', width=0.00005, alpha=0.2, edgecolor='k', linewidth=0.5)
+            ax2.bar(x_trades, y_trades, color='r', width=0.00005, alpha=0.2, edgecolor='k', linewidth=0.5)
             ax1.xaxis_date()
             ax2.xaxis_date()
 
@@ -265,8 +266,9 @@ class ExecutionAlgo:
                 ax2.axvline(x=x[i], color='k', linestyle='dashed', alpha=0.2)
                 i += (self.no_of_slices+1)
             ax1.set_title('Execution Schedule across Buckets')
-            ax1.set(ylabel='Tick Size')
-            ax2.set(xlabel='Time', ylabel='Tick Size')
+            ax1.set(ylabel='Volume')
+            ax2.set_title('Trades Executed across Buckets')
+            ax2.set(xlabel='Time', ylabel='Volume')
             plt.show()
 
         else:
