@@ -29,7 +29,7 @@ from ray.rllib.agents.ppo.appo import APPOTrainer
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker import Broker
 from src.core.environment.limit_orders_setup.base_env import NarrowTradeLimitEnvDiscrete
-from train_app import train_eval_rolling_window
+from train_ppo import train_eval_rolling_window
 
 from ray.rllib.models import ModelCatalog
 from src.core.agent.ray_model import CustomRNNModel
@@ -46,7 +46,7 @@ def init_arg_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="lob_env")
-    parser.add_argument("--num-cpus", type=int, default=1)
+    parser.add_argument("--num-cpus", type=int, default=38)
     parser.add_argument("--agent-restore-path", type=str, default=None)
 
     parser.add_argument(
@@ -70,7 +70,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=10000000,
+        default=1000000,
         help="Number of episodes to train.")
 
     parser.add_argument(
@@ -91,8 +91,16 @@ def init_arg_parser():
         default=0.9,
         help="Reward at which we stop training.")
 
+    parser.add_argument(
+        "--rl_algo",
+        type=str,
+        default="APPO",
+        help="RL Algorithm to train the Agent with.")
+
+
     return parser.parse_args()
 
+args = init_arg_parser()
 
 def lob_env_creator(env_config):
 
@@ -130,36 +138,11 @@ def init_session_container(session_id):
     return session_container_path
 
 
-# def test_agent_one_episode(config, agent_path):
-#
-#     agent = dqn.DQNTrainer(config=config)
-#     agent.restore(agent_path)
-#     config['env_config']['train_config']['train'] = False
-#     env = lob_env_creator(config['env_config'])
-#
-#     episode_reward = 0
-#     done = False
-#     obs = env.reset()
-#     while not done:
-#         action = agent.compute_action(obs)
-#         obs, reward, done, info = env.step(action)
-#         episode_reward += reward
-#
-#     return episode_reward
-
 
 if __name__ == "__main__":
 
     args = init_arg_parser()
 
-    # For debugging the env or other modules, set local_mode=True
-    ray.init(
-        local_mode=False,
-        # local_mode=True,
-        num_cpus=args.num_cpus + 1)
-    register_env(args.env, lob_env_creator)
-
-    # ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
     # APPO based IMPALA CONFIG
     APPO_CONFIG = impala.ImpalaTrainer.merge_trainer_configs(
@@ -214,7 +197,7 @@ if __name__ == "__main__":
             "entropy_coeff_schedule": None,
 
             # From params...
-            "num_workers": args.num_cpus,
+            "num_workers": args.num_cpus-1,
             "framework": args.framework,
             "env": args.env,
 
@@ -239,8 +222,8 @@ if __name__ == "__main__":
                   'trade_config': {'trade_direction': 1,
                                    'vol_low': 100,
                                    'vol_high': 100,
-                                   'no_slices_low': 3,
-                                   'no_slices_high': 3,
+                                   'no_slices_low': 9,
+                                   'no_slices_high': 9,
                                    'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0,1,no_of_slices+2)[1:-1],2)),
                                    'rand_bucket_low': 0,
                                    'rand_bucket_high': 0},
@@ -257,57 +240,68 @@ if __name__ == "__main__":
     env_config = {"env_config": env_config}
     APPO_CONFIG.update(env_config)
 
-    session_container_path = init_session_container(args.session_id)
+    train_eval_rolling_window(APPO_CONFIG,args)
 
-    with open("{}/params.txt".format(session_container_path), "w") as env_params_file:
-        env_config_copy = copy.deepcopy(env_config)["env_config"]
-        f__ = env_config_copy["trade_config"]["bucket_func"]
-        env_config_copy["trade_config"]["bucket_func"] = f__(0)
 
-        env_config_copy["nn_model"] = APPO_CONFIG["model"]
+# # For debugging the env or other modules, set local_mode=True
+    # ray.init(
+    #     local_mode=False,
+    #     # local_mode=True,
+    #     num_cpus=args.num_cpus + 1)
+    # register_env(args.env, lob_env_creator)
 
-        env_params_file.write(json.dumps(env_config_copy,
-                                         indent=4,
-                                         separators=(',', ': ')))
+    # ModelCatalog.register_custom_model("end_to_end_model", CustomRNNModel)
 
-    shutil.make_archive(base_dir="src",
-                        root_dir=os.getcwd(),
-                        format='zip',
-                        base_name=os.path.join(session_container_path, "src"))
-    print("")
+    # session_container_path = init_session_container(args.session_id)
+    #
+    # with open("{}/params.txt".format(session_container_path), "w") as env_params_file:
+    #     env_config_copy = copy.deepcopy(env_config)["env_config"]
+    #     f__ = env_config_copy["trade_config"]["bucket_func"]
+    #     env_config_copy["trade_config"]["bucket_func"] = f__(0)
+    #
+    #     env_config_copy["nn_model"] = APPO_CONFIG["model"]
+    #
+    #     env_params_file.write(json.dumps(env_config_copy,
+    #                                      indent=4,
+    #                                      separators=(',', ': ')))
+    #
+    # shutil.make_archive(base_dir="src",
+    #                     root_dir=os.getcwd(),
+    #                     format='zip',
+    #                     base_name=os.path.join(session_container_path, "src"))
+    # print("")
+    #
+    # stop = {
+    #     "training_iteration": args.nr_episodes,
+    #     "timesteps_total": args.stop_timesteps,
+    #     "episode_reward_mean": args.stop_reward,
+    # }
+    #
+    # is_train = True
 
-    stop = {
-        "training_iteration": args.nr_episodes,
-        "timesteps_total": args.stop_timesteps,
-        "episode_reward_mean": args.stop_reward,
-    }
-
-    is_train = True
-
-    #TODO: Implement call to: train_eval_rolling_window
-    if is_train:
-
-        results = tune.run("APPO",
-                           config=APPO_CONFIG,
-                           metric="episode_reward_mean",
-                           mode="max",
-                           checkpoint_freq=10,
-                           stop={"training_iteration": args.nr_episodes},
-                           checkpoint_at_end=True,
-                           local_dir=session_container_path,
-                           restore=None if args.agent_restore_path is None else os.path.join(session_container_path,
-                                                                                             "APPO",
-                                                                                             args.agent_restore_path,),
-                           max_failures=-1)
-    else:
-        trainer = APPOTrainer(config=APPO_CONFIG)
-
-        for _ in range(args.nr_episodes):
-            result = trainer.train()
-            print(pretty_print(result))
-
-            if result["timesteps_total"] >= args.stop_timesteps or \
-                    result["episode_reward_mean"] >= args.stop_reward:
-                break
-
-    ray.shutdown()
+    # if is_train:
+    #
+    #     results = tune.run("APPO",
+    #                        config=APPO_CONFIG,
+    #                        metric="episode_reward_mean",
+    #                        mode="max",
+    #                        checkpoint_freq=10,
+    #                        stop={"training_iteration": args.nr_episodes},
+    #                        checkpoint_at_end=True,
+    #                        local_dir=session_container_path,
+    #                        restore=None if args.agent_restore_path is None else os.path.join(session_container_path,
+    #                                                                                          "APPO",
+    #                                                                                          args.agent_restore_path,),
+    #                        max_failures=-1)
+    # else:
+    #     trainer = APPOTrainer(config=APPO_CONFIG)
+    #
+    #     for _ in range(args.nr_episodes):
+    #         result = trainer.train()
+    #         print(pretty_print(result))
+    #
+    #         if result["timesteps_total"] >= args.stop_timesteps or \
+    #                 result["episode_reward_mean"] >= args.stop_reward:
+    #             break
+    #
+    # ray.shutdown()

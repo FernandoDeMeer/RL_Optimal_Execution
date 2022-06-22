@@ -18,19 +18,19 @@ WORKDIR /app
 
 COPY src ./src
 
-COPY train_app.py .
+COPY train_ppo.py .
 COPY train_async_ppo.py .
 
 COPY requirements.txt .
 
 RUN pip install -r requirements.txt
 
-#ENTRYPOINT ["python3", "train_app.py", "--num-cpus=39"]
+#ENTRYPOINT ["python3", "train_ppo.py", "--num-cpus=39"]
 
 ##
 ## APPO ##
 ##
-ENTRYPOINT ["python3", "train_async_ppo.py", "--num-cpus=39"]
+ENTRYPOINT ["python3", "train_ppo.py", "--num-cpus=39"]
 
 #ENTRYPOINT ["python3",\
 #            "train_async_ppo.py",\

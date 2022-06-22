@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import os
 import random
 from os.path import isdir, isfile, join
@@ -12,7 +13,7 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 
 from tqdm import tqdm
-from train_app import lob_env_creator, init_arg_parser, ROOT_DIR, DATA_DIR
+from train_ppo import lob_env_creator, init_arg_parser, ROOT_DIR, DATA_DIR
 from ray.rllib.agents.ppo import PPOTrainer, APPOTrainer
 
 from src.core.agent.ray_model import CustomRNNModel
@@ -97,7 +98,7 @@ def eval_agent(trainer, env, nr_episodes,):
     vwap_perc_diff = (np.array(vwap_bmk)-np.array(vwap_rl)) / np.array(vwap_bmk)
     downside_median = np.median(vwap_perc_diff[outperf])
     upside_median = np.median(vwap_perc_diff[[not elem for elem in outperf]])
-    vol_percentages_avg, error_vol_percentages = tolerant_mean(vol_percentages)
+    vol_percentages_avg, vol_percentages_std = tolerant_mean(vol_percentages)
     # execution_speeds = np.array(execution_time_bmk) - np.array(execution_time_rl)
 
     # Collect results
@@ -106,7 +107,7 @@ def eval_agent(trainer, env, nr_episodes,):
              'vwap_rl': np.array(vwap_rl),
              'vwap_diff': vwap_perc_diff,
              'vol_percentages': np.array(vol_percentages_avg),
-             'vol_percentages_error': np.array(error_vol_percentages)}
+             'vol_percentages_std': np.array(vol_percentages_std)}
     stats = {'percentage_outperformance': sum(outperf)/len(outperf),
              'downside_median': downside_median,
              'upside_median': upside_median}
@@ -183,18 +184,12 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
     axs[1, 0].set_title('% Differences of Execution Prices, Average: {:.4e}%'.format(round(price_diff_percent_avg,4)))
     axs[1, 0].set(xlabel='Execution Price Difference (%)', ylabel='Frequency')
 
-    try:
-        axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*d_out['vol_percentages'],
-                      align='center',
-                      alpha=0.5,
-                      ecolor='black',
-                      capsize=10)
-    except:
-        axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*np.array(d_out['vol_percentages']),
-                      align='center',
-                      alpha=0.5,
-                      ecolor='black',
-                      capsize=10)
+    axs[1, 1].bar(np.arange(len(d_out['vol_percentages'])),100*np.array(d_out['vol_percentages']),
+                  yerr = 100*np.array(d_out['vol_percentages_std']),
+                  align='center',
+                  alpha=0.5,
+                  ecolor='black',
+                  capsize=10)
     axs[1, 1].set_title('Average % of the volume executed per Order Placement in each Bucket')
     axs[1, 1].set(xlabel= 'Order Number', ylabel= 'Volume (%)')
 
@@ -261,7 +256,7 @@ def evaluate_session(sessions_path,config,trainer):
 
     env = lob_env_creator(env_config= config["env_config"])
     try:
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
                        eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][1],
@@ -269,8 +264,11 @@ def evaluate_session(sessions_path,config,trainer):
                                                                       config["env_config"]["train_config"]["eval_data_periods"][3],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][4],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][5],))
+        d_out.pop('vol_percentages', None)
+        d_out.pop('vol_percentages_std', None)
+        pd.DataFrame.from_dict(d_out,'columns').to_csv(sessions_path + r'\{}\PPO'.format(str(np.max(sessions))) + r'\results.csv', index = False)
     except:
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 5,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         plot_eval_days(session_dir=sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), d_outs_list= d_out,
                        eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][1],
@@ -278,6 +276,11 @@ def evaluate_session(sessions_path,config,trainer):
                                                                       config["env_config"]["train_config"]["eval_data_periods"][3],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][4],
                                                                       config["env_config"]["train_config"]["eval_data_periods"][5],))
+        d_out.pop('vol_percentages', None)
+        d_out.pop('vol_percentages_error', None)
+        pd.DataFrame.from_dict(d_out,'columns').to_csv(sessions_path + r'\{}\PPO'.format(str(np.max(sessions))) + r'\results.csv', index = False)
+
+
 
 
 
@@ -343,7 +346,7 @@ def evaluate_session_by_volatility(sessions_path,config):
 
 
 if __name__ == "__main__":
-    from train_app import config
+    from train_ppo import config
 
     args = init_arg_parser()
 
