@@ -30,7 +30,8 @@ from ray.rllib.models import ModelCatalog
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 
-sessions_path = ROOT_DIR + r'\data\sessions'
+# sessions_path = ROOT_DIR + r'\data\sessions'
+sessions_path = os.path.join(ROOT_DIR, "data", "sessions")
 
 def init_arg_parser():
 
@@ -60,7 +61,7 @@ def init_arg_parser():
     parser.add_argument(
         "--nr_episodes",
         type=int,
-        default=1000000,
+        default=125,
         help="Number of episodes to train.")
 
     parser.add_argument(
@@ -85,17 +86,17 @@ config = {
     "num_workers": args.num_cpus - 1,
     "num_envs_per_worker": 1,
     # Size of batches collected from each worker.
-    "rollout_fragment_length": 5,
+    # "rollout_fragment_length": 64,
     # Number of timesteps collected for each SGD round. This defines the size
     # of each SGD epoch.
     # DEFAULT train_batch_size: 4000
-    "train_batch_size": 240,
+    "train_batch_size": 4096,
     # Total SGD batch size across all devices for SGD. This defines the
     # minibatch size within each epoch.
-    "sgd_minibatch_size": 32,
+    # "sgd_minibatch_size": 32,
     # Number of SGD iterations in each outer loop (i.e., number of epochs to
     # execute per train batch).
-    "num_sgd_iter": 30,
+    # "num_sgd_iter": 30,
     # discount factor
     "gamma": 1.0,
     "lr": 5e-5,
@@ -286,11 +287,12 @@ def train_agent(config,args,restore_previous_agent,session_idx):
         experiment: Experiment Analysis object + saves training checkpoints.
 
     """
+    #
     # For debugging the ENV or other modules, set local_mode=True
     ray.init(num_cpus=args.num_cpus,
              local_mode=False,
-             ignore_reinit_error= True,
              # local_mode=True,
+             ignore_reinit_error= True,
              )
     # Use a RNN Agent
     register_env("lob_env", lob_env_creator)

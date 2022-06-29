@@ -198,11 +198,11 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
     fig.savefig(session_dir + r"\evaluation_graphs_{}.png".format(eval_period_tag))
 
 
-def get_session_best_checkpoint_path(session_path,trainer, session,):
+def get_session_best_checkpoint_path(session_path, trainer, session,):
 
-    session_path = session_path + r'\{}\{}'.format(str(session),trainer)
+    session_path = os.path.join(session_path, str(session), trainer)
     session_filename = [f for f in os.listdir(session_path) if isdir(join(session_path, f))]
-    sessions_path = session_path + r'\{}'.format(session_filename[0])
+    sessions_path = os.path.join(session_path, session_filename[0])
 
     analysis = tune.Analysis(sessions_path)  # can also be the result of `tune.run()`
 
