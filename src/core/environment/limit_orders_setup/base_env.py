@@ -248,8 +248,6 @@ class BaseEnv(gym.Env, ABC):
             self.state = self._build_observation_at_event(event_time=t)
         else:
             t = conv2date(self.broker.trade_logs["rl_algo"][-1]["timestamp"])
-            if t in self.broker.benchmark_algo.buckets.bucket_bounds:
-                raise ValueError("Can't build an observation at a bucket end!")
             self.state = self._build_observation_at_event(event_time=t)
 
         if self.done:
