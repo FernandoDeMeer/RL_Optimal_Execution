@@ -79,7 +79,10 @@ def eval_agent(trainer, env, nr_episodes,):
         done = False
         state = trainer.get_policy().get_initial_state()
         while not done:
-            action, state, _ = trainer.compute_action(obs,state = state)
+            try:
+                action, state, _ = trainer.compute_action(obs,state = state)
+            except:
+                action = trainer.compute_action(obs,state = state)
             obs, reward, done, info = env.step(action)
             episode_reward += reward
         # Extract the results of both algos
@@ -193,9 +196,9 @@ def plot_eval_days(session_dir, d_outs_list, eval_period_tag):
     axs[1, 1].set_title('Average % of the volume executed per Order Placement in each Bucket')
     axs[1, 1].set(xlabel= 'Order Number', ylabel= 'Volume (%)')
 
-    # plt.show()
+    plt.show()
 
-    fig.savefig(session_dir + r"\evaluation_graphs_{}.png".format(eval_period_tag))
+    fig.savefig(os.path.join(session_dir, "evaluation_graphs_{}.png".format(eval_period_tag)))
 
 
 def get_session_best_checkpoint_path(session_path, trainer, session,):
@@ -236,10 +239,12 @@ def get_n_highest_and_lowest_vol_days(env,n):
 
     return highest_vol_days, lowest_vol_days
 
-def evaluate_session(sessions_path,config,trainer):
+def evaluate_session(sessions_path,config,trainer, session_id):
 
     sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
-    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer=trainer, session= np.max(sessions))
+    session_id = session_id if session_id != None else np.max(sessions)
+    checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer=trainer, session= session_id)
+
 
     config["env_config"]["train_config"]["train"] = False # To load only eval_data_periods data
     config["num_workers"] = 0
@@ -257,28 +262,32 @@ def evaluate_session(sessions_path,config,trainer):
     env = lob_env_creator(env_config= config["env_config"])
     try:
         d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
-        plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_out,
-                       eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][1],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][2],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][3],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][4],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][5],))
+        eval_period_tag = '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][1],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][2],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][3],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][4],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][5],)
+        plot_eval_days(session_dir=os.path.join(sessions_path,'{}'.format(str(session_id)),'PPO'), d_outs_list= d_out,
+                       eval_period_tag= eval_period_tag)
         d_out.pop('vol_percentages', None)
         d_out.pop('vol_percentages_std', None)
-        pd.DataFrame.from_dict(d_out,'columns').to_csv(sessions_path + r'\{}\PPO'.format(str(np.max(sessions))) + r'\results.csv', index = False)
+        pd.DataFrame.from_dict(d_out,'columns').to_csv(os.path.join(sessions_path,'{}'.format(str(session_id)),
+                                                                    'PPO','results_{}_{}.csv'.format(str(session_id),eval_period_tag)), index = False)
     except:
         d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
-        plot_eval_days(session_dir=sessions_path + r'\{}\APPO'.format(str(np.max(sessions))), d_outs_list= d_out,
-                       eval_period_tag= '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][1],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][2],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][3],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][4],
-                                                                      config["env_config"]["train_config"]["eval_data_periods"][5],))
+        eval_period_tag = '{}-{}-{} to {}-{}-{}'.format(config["env_config"]["train_config"]["eval_data_periods"][0],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][1],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][2],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][3],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][4],
+                                                        config["env_config"]["train_config"]["eval_data_periods"][5],)
+        plot_eval_days(session_dir=os.path.join(sessions_path, '{}'.format(str(np.max(sessions))), 'APPO'), d_outs_list= d_out,
+                       eval_period_tag= eval_period_tag)
         d_out.pop('vol_percentages', None)
         d_out.pop('vol_percentages_error', None)
-        pd.DataFrame.from_dict(d_out,'columns').to_csv(sessions_path + r'\{}\PPO'.format(str(np.max(sessions))) + r'\results.csv', index = False)
+        pd.DataFrame.from_dict(d_out,'columns').to_csv(os.path.join(sessions_path,'{}'.format(str(session_id)),
+                                                                    'APPO','results_{}_{}.csv'.format(str(session_id),eval_period_tag)), index = False)
 
 
 
@@ -313,7 +322,7 @@ def evaluate_session_by_volatility(sessions_path,config):
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         d_outs_list_high_vol.append(d_out)
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_high_vol,
@@ -332,7 +341,7 @@ def evaluate_session_by_volatility(sessions_path,config):
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         d_outs_list_low_vol.append(d_out)
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_low_vol,
@@ -382,7 +391,7 @@ if __name__ == "__main__":
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         d_outs_list_high_vol.append(d_out)
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outs_list_high_vol, eval_period_tag= 'High_Vol')
@@ -394,7 +403,7 @@ if __name__ == "__main__":
         date = datetime.strptime(match.group(), '%Y_%m_%d').date()
 
         env.broker.data_feed.load_specific_day_data(date)
-        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 25,)
+        d_out, stats = eval_agent(trainer= agent,env= env ,nr_episodes= 1000,)
         d_outa_list_low_vol.append(d_out)
 
     plot_eval_days(session_dir=sessions_path + r'\{}\PPO'.format(str(np.max(sessions))), d_outs_list= d_outa_list_low_vol, eval_period_tag= 'Low_Vol')

@@ -29,7 +29,7 @@ from ray.rllib.agents.ppo.appo import APPOTrainer
 from src.data.historical_data_feed import HistoricalDataFeed
 from src.core.environment.limit_orders_setup.broker import Broker
 from src.core.environment.limit_orders_setup.base_env import NarrowTradeLimitEnvDiscrete
-from train_ppo import train_eval_rolling_window
+from train_ppo import train_rolling_window
 
 from ray.rllib.models import ModelCatalog
 from src.core.agent.ray_model import CustomRNNModel
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     env_config = {"env_config": env_config}
     APPO_CONFIG.update(env_config)
 
-    train_eval_rolling_window(APPO_CONFIG,args)
+    train_rolling_window(APPO_CONFIG, args)
 
 
 # # For debugging the env or other modules, set local_mode=True

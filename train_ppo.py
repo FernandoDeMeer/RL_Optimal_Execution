@@ -38,7 +38,7 @@ def init_arg_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="lob_env")
-    parser.add_argument("--num-cpus", type=int, default=2)
+    parser.add_argument("--num-cpus", type=int, default=30)
 
     parser.add_argument(
         "--framework",
@@ -56,7 +56,13 @@ def init_arg_parser():
         "--session_id",
         type=str,
         default="0",
-        help="Session id.")
+        help="Session id. If set to 0 will be automatically created via time.time()")
+
+    parser.add_argument(
+        "--session_ids",
+        type=list,
+        default=[1656672165],
+        help="Session ids to load for evaluation, not used during training")
 
     parser.add_argument(
         "--nr_episodes",
@@ -110,11 +116,11 @@ config = {
     "clip_param": 0.2,
     "vf_loss_coeff": 1.0,
     "vf_share_layers": False,
-    "model": {
-        "custom_model": "end_to_end_model",
-        "custom_model_config": {"fcn_depth": 128,
-                                "lstm_cells": 256},
-    },
+    # "model": {
+    #     "custom_model": "end_to_end_model",
+    #     "custom_model_config": {"fcn_depth": 128,
+    #                             "lstm_cells": 256},
+    # },
 
     "env_config": {'obs_config': {"lob_depth": 5,
                                   "nr_of_lobs": 5,
@@ -123,7 +129,7 @@ config = {
                        "train": True,
                        "symbol": 'btcusdt',
                        "train_data_periods": [2021, 6, 1, 2021, 6, 20],
-                       "eval_data_periods": [2021, 6, 12, 2021, 6, 14]
+                       "eval_data_periods": [2021, 6, 21, 2021, 6, 30]
                    },
                    'trade_config': {'trade_direction': 1,
                                     'vol_low': 100,
@@ -133,7 +139,7 @@ config = {
                                     'bucket_func': lambda no_of_slices: list(np.around(np.linspace(0,1,no_of_slices+2)[1:-1],2)),
                                     'rand_bucket_low': 0,
                                     'rand_bucket_high': 0},
-                   'start_config': {'hour_low': 0,
+                   'start_config': {'hour_low': 1,
                                     'hour_high': 22,
                                     'minute_low': 0,
                                     'minute_high': 59,
@@ -218,7 +224,7 @@ def test_agent_one_episode(config, agent_path, eval_data_periods, symbol):
 
     return episode_reward
 
-def train_eval_rolling_window(config,args):
+def train_rolling_window(config, args):
     """
     Carry out a rolling-window training-evaluation experiment over a given time period.
     Args:
@@ -268,7 +274,6 @@ def train_eval_rolling_window(config,args):
                                                                       train_eval_period[1][1].month,
                                                                       train_eval_period[1][1].day]
         train_agent(config,args,restore_previous_agent,session_idx = session_idx)
-        evaluate_session(sessions_path= sessions_path ,trainer= args.rl_algo ,config = config)
         restore_previous_agent = True
         session_idx += 1
     ray.shutdown()
@@ -326,14 +331,15 @@ def train_agent(config,args,restore_previous_agent,session_idx):
     if restore_previous_agent:
         from src.core.eval.evaluate import get_session_best_checkpoint_path
         sessions = [int(session_id) for session_id in os.listdir(sessions_path) if session_id !='.gitignore']
-        checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer='PPO', session= np.min(sorted(sessions,reverse=True)[:2]))
+        checkpoint = get_session_best_checkpoint_path(session_path=sessions_path, trainer='PPO',
+                                                      session= np.min(sorted(sessions,reverse=True)[:2])) # The np.min(sorted(sessions,reverse=True)[:2]) corresponds to the last trained session
 
 
         experiment = tune.run(args.rl_algo,
                               config=config,
                               metric="episode_reward_mean",
                               mode="max",
-                              checkpoint_freq=1000,
+                              checkpoint_freq=25,
                               stop={"training_iteration": session_idx * args.nr_episodes},
                               checkpoint_at_end=True,
                               local_dir=session_container_path,
@@ -345,7 +351,7 @@ def train_agent(config,args,restore_previous_agent,session_idx):
                               config=config,
                               metric="episode_reward_mean",
                               mode="max",
-                              checkpoint_freq=1000,
+                              checkpoint_freq=25,
                               stop={"training_iteration": args.nr_episodes},
                               checkpoint_at_end=True,
                               local_dir=session_container_path,
@@ -354,9 +360,63 @@ def train_agent(config,args,restore_previous_agent,session_idx):
 
     return experiment
 
+def eval_rolling_window(config,args):
+
+    """
+    Carry out the evaluation of the rolling window experiment of train_rolling_window(). For post-training evaluation purposes.
+    Args:
+        config: Experiment config in ray-compatible format.
+        args: Experiment settings (framework, symbol, session_id, nr_of_episodes)
+
+    Returns:
+        Evaluation files for the best checkpoint of each training/eval period distributed accroding to the session_id.
+    """
+    from src.core.eval.evaluate import evaluate_session
+
+    train_eval_horizon = config["env_config"]["train_config"]["train_data_periods"]
+
+    data_start_day = datetime.datetime(year=train_eval_horizon[0], month=train_eval_horizon[1], day=train_eval_horizon[2])
+    data_end_day = datetime.datetime(year=train_eval_horizon[3], month=train_eval_horizon[4], day=train_eval_horizon[5])
+
+    delta = data_start_day - data_end_day   # returns timedelta
+    train_eval_period_days = []
+    for i in range(-delta.days + 1):
+        day = data_start_day + datetime.timedelta(days=i)
+        train_eval_period_days.append(day)
+
+    train_eval_period_limits = []
+    for i in range(len(train_eval_period_days)//5):
+        train_eval_period_limits.append(train_eval_period_days[5*i])
+        train_eval_period_limits.append(train_eval_period_days[5*(i+1)-1])
+
+    train_eval_periods =[]
+    for period_idx in range(len(train_eval_period_limits)//2-1):
+        train_eval_periods.append([(train_eval_period_limits[2*period_idx],train_eval_period_limits[2*period_idx+1]),
+                                   (train_eval_period_limits[2*period_idx+2],train_eval_period_limits[2*period_idx+3])])
+
+    i = 0
+    for train_eval_period in train_eval_periods:
+
+        config["env_config"]["train_config"]["train_data_periods"] = [train_eval_period[0][0].year,
+                                                                      train_eval_period[0][0].month,
+                                                                      train_eval_period[0][0].day,
+                                                                      train_eval_period[0][1].year,
+                                                                      train_eval_period[0][1].month,
+                                                                      train_eval_period[0][1].day]
+        config["env_config"]["train_config"]["eval_data_periods"] = [train_eval_period[1][0].year,
+                                                                     train_eval_period[1][0].month,
+                                                                     train_eval_period[1][0].day,
+                                                                     train_eval_period[1][1].year,
+                                                                     train_eval_period[1][1].month,
+                                                                     train_eval_period[1][1].day]
+        evaluate_session(sessions_path= sessions_path ,trainer= args.rl_algo ,config = config, session_id=args.session_ids[i])
+        i += 1
+
 if __name__ == "__main__":
 
-    train_eval_rolling_window(config,args)
+    # train_rolling_window(config,args)
+
+    eval_rolling_window(config,args)
 
     # experiment = train_agent(config,args)
     #
