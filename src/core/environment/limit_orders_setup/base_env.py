@@ -9,8 +9,6 @@ from decimal import Decimal
 from abc import ABC
 
 from src.core.environment.limit_orders_setup.execution_algo import TWAPAlgo, RLAlgo
-from src.ui.ui_comm import UIServer
-from src.ui.ui_comm import Charts as Charts
 
 DEFAULT_ENV_CONFIG = {'obs_config': {"lob_depth": 5,
                                      "nr_of_lobs": 5,
@@ -453,44 +451,6 @@ class BaseEnv(gym.Env, ABC):
     @staticmethod
     def add_default_dict(config):
         return {**DEFAULT_ENV_CONFIG, **config}
-
-    def render(self, mode='human'):
-
-        ##
-        #### send ONLY plain python list with primitives (floats or ints) ####
-        ##
-
-        if self.ui is None:
-            self.ui = UIServer()
-
-        pxs = []
-        for d in self.mid_pxs:
-            pxs.append(float(d))
-
-        lvls = []
-        for _ in range(int(len(pxs) / 2)):
-            lvls.append(float(self.broker.benchmark_algo.bmk_vwap))
-
-        for _ in range(int(len(pxs) / 2)):
-            lvls.append(float(self.broker.rl_algo.rl_vwap))
-
-        timeseries_data = [
-            {
-                "event": "{}#{}".format(Charts.CHART_0, "0"),
-                "data": pxs
-            },
-            {
-                "event": "{}#{}".format(Charts.CHART_0, "1"),
-                "data": lvls
-            },
-            {
-                "event": "{}#{}".format(Charts.CHART_1, "0"),
-                "data": lvls
-            },
-        ]
-
-        self.ui.send_rendering_data(rl_session_epoch=self.ui_epoch,
-                                    data=timeseries_data)
 
 
 class ExampleEnvRewardAtStep(BaseEnv):
