@@ -1,23 +1,25 @@
-# RLOptimalTradeExecution
+# RL Optimal Trade Execution
+This is the code repository of "A Modular Framework for RL Optimal Execution".
 
+## Installation
 
-Installation steps:
+We recommend running the experiments via the `Dockerfile`.
 
-git clone https://github.zhaw.ch/dasc/RLOptimalTradeExecution.git
+Alternatively, one can manually install all the necessary libraries in a virtual environment via
 
-cd RLOptimalTradeExecution
+``pip install -r requirements.txt``
 
-source venv/bin/activate
+## Entrypoints
 
-pip install -r requirements.txt
+The `train_{algo}.py` files  are the entrypoints of the experiments. Training and evaluations can be carried out modifying their `main()` functions. Adding new agents and training on different periods (if the data is provided) can be done via modifying the `config` dict.
 
-<br/><br/>
+## Framework Modules
+`src/core/data/historical:datafeed.py` contains the implementation of the `DataFeed` class. 
 
-In order to use the visualisation, set SHOW_UI=True in ppo_sbaseline.py file. After the agent was trained/loaded, it will go in "inference" mode. To control the stepping through the environment, bring the app UserInterface into focus and use the following keys on your keyboard:
+`src/core/environment/limit_orders_setup` contains the implementations of the `Execution Algo`, `Broker` classes as well as the `gym` environment. 
 
-S = is for toggling the pause/resume between Steps
+## Miscellaneous 
 
-N = while you are in "S" pause mode, the N key can be used to move forward in time 1 step.
+`src/tests` contains the implementation of the multiple UnitTests applied to the environment.
 
-
-E = is for toggling the pause/resume between Episodes (for the moment there is a little bug here, ignore E)
+The `plot_schedule` method of the `Execution Algo` class can reproduce Figures 5 & 6 of the paper. 
